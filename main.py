@@ -1,5 +1,6 @@
 import pygame
 import sys
+import math
 
 
 WIDTH = 1200
@@ -12,6 +13,9 @@ BLUE = (50, 80, 255)
 
 PLAYER_RADIUS = 20
 PLAYER_SPEED = 5
+
+BALL_RADIUS = 10
+BALL_FRICTION = 0.98
 
 pygame.init()
 
@@ -43,11 +47,82 @@ class Player:
         if keys[pygame.K_s]:
             self.y += self.speed
 
+        # Ограничение выхода за границы поля
+        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
+        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
+
     
+    def kick_ball(self, ball):
+        dx = ball.x - self.x
+        dy = ball.y - self.y
+
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        if distance == 0:
+            return
+        
+        # Удар только если мяч рядом
+        if distance < self.radius + ball.radius + 10:
+
+            # Нормализуем вектор удара
+            dx /= distance
+            dy /= distance
+
+            kick_force = 10
+
+            ball.vx = dx * kick_force
+            ball.vy = dy * kick_force
+
+
     def draw(self, screen):
         pygame.draw.circle(
             screen,
             self.color,
+            (int(self.x), int(self.y)),
+            self.radius
+        )
+
+
+class Ball:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.vx = 0
+        self.vy = 0
+        self.radius = BALL_RADIUS
+
+
+    def update(self):
+        # Движение мяча
+        self.x += self.vx
+        self.y += self.vy
+
+        # Трение
+        self.vx *= BALL_FRICTION
+        self.vy *= BALL_FRICTION
+
+        # Отскок от стен
+        if self.x - self.radius <= 0:
+            self.x = self.radius
+            self.vx *= -1
+
+        if self.x + self.radius >= WIDTH:
+            self.x = WIDTH - self.radius
+            self.vx *= -1
+
+        if self.y - self.radius <= 0:
+            self.y = self.radius
+            self.vy *= -1
+
+        if self.y + self.radius >= HEIGHT:
+            self.y = HEIGHT - self.radius
+            self.vy *= -1
+
+
+    def draw(self, screen):
+        pygame.draw.circle(
+            screen,
+            WHITE,
             (int(self.x), int(self.y)),
             self.radius
         )
@@ -79,22 +154,33 @@ def main():
 
     player = Player(WIDTH // 2, HEIGHT // 2, BLUE)
 
+    ball = Ball(WIDTH // 2 + 150, HEIGHT // 2)
+
     while running:
         clock.tick(FPS)
 
         # Обработка событий
         for event in pygame.event.get():
+            
             if event.type == pygame.QUIT:
                 running = False
+
+            # Удар по space
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    player.kick_ball(ball)
         
         # Управление
         keys = pygame.key.get_pressed()
         player.move(keys)
 
-        # Обновление (пусто)
+        # Обновление
+        ball.update()
 
         # Отрисовка
         draw_field()
+
+        ball.draw(screen)
         player.draw(screen)
 
         pygame.display.flip()
