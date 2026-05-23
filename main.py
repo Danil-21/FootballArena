@@ -10,6 +10,7 @@ FPS = 60
 GREEN = (30, 160, 60)
 WHITE = (255, 255, 255)
 BLUE = (50, 80, 255)
+RED = (255, 50, 50)
 
 PLAYER_RADIUS = 20
 PLAYER_SPEED = 5
@@ -17,12 +18,16 @@ PLAYER_SPEED = 5
 BALL_RADIUS = 10
 BALL_FRICTION = 0.98
 
+GOAL_WIDTH = 20
+GOAL_HEIGHT = 200
+
 pygame.init()
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Football Arena")
 
 clock = pygame.time.Clock()
+font = pygame.font.SysFont('Arial', 40)
 
 
 class Player:
@@ -127,6 +132,16 @@ class Ball:
             self.radius
         )
 
+class Goal:
+    """Класс для ворот"""
+    def __init__(self, x, y, width, height, team):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.team = team
+
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, WHITE, self.rect, 3)
+
 
 def draw_field():
     """
@@ -149,12 +164,46 @@ def draw_field():
                        )
     
 
+def goal_check(ball, left_goal, right_goal):
+    """Проверяет, забит ли гол"""
+
+    # Проверяем левые ворота
+    if left_goal.rect.collidepoint(ball.x, ball.y):
+        return 'RIGHT'
+    
+    # Проверяем правые ворота
+    if right_goal.rect.collidepoint(ball.x, ball.y):
+        return 'LEFT'
+    
+    return None
+
+
 def main():
     running = True
 
     player = Player(WIDTH // 2, HEIGHT // 2, BLUE)
-
     ball = Ball(WIDTH // 2 + 150, HEIGHT // 2)
+
+    # Ворота
+    left_goal = Goal(
+        0,
+        HEIGHT // 2 - GOAL_HEIGHT // 2,
+        GOAL_WIDTH,
+        GOAL_HEIGHT,
+        'LEFT'
+    )
+
+    right_goal = Goal(
+        WIDTH - GOAL_WIDTH,
+        HEIGHT // 2 - GOAL_HEIGHT // 2,
+        GOAL_WIDTH,
+        GOAL_HEIGHT,
+        'RIGHT'
+    )
+
+    # Счет
+    left_score = 0
+    right_score = 0
 
     while running:
         clock.tick(FPS)
@@ -177,11 +226,44 @@ def main():
         # Обновление
         ball.update()
 
+        # Проверка гола
+        goal = goal_check(ball, left_goal, right_goal)
+
+        if goal == 'LEFT':
+            left_score += 1
+
+            # Сброс мяча в центр
+            ball.x = WIDTH // 2
+            ball.y = HEIGHT // 2
+
+            ball.vx = 0
+            ball.vy = 0
+        
+        if goal == 'RIGHT':
+            right_score += 1
+
+            # Сброс мяча в центр
+            ball.x = WIDTH // 2
+            ball.y = HEIGHT // 2
+
+            ball.vx = 0
+            ball.vy = 0
+
         # Отрисовка
         draw_field()
-
+        
+        # Ворота
+        left_goal.draw(screen)
+        right_goal.draw(screen)
+        
+        # Объекты
         ball.draw(screen)
         player.draw(screen)
+        
+        # Счет
+        score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
+
+        screen.blit(score_text, (WIDTH // 2 - 40, 20))
 
         pygame.display.flip()
 
