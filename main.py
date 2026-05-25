@@ -88,6 +88,59 @@ class Player:
         )
 
 
+class AIPlayer(Player):
+    
+    def update(self, ball, target_goal):
+
+        dx = ball.x - self.x
+        dy = ball.y - self.y
+
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        # Движение к мячу
+        if distance != 0:
+
+            # Нормализуем вектор движения
+            dx /= distance
+            dy /= distance
+
+            # Двигаемся в сторону мяча
+            self.x += dx * self.speed
+            self.y += dy * self.speed
+
+        # Удар по мячу
+        if distance < self.radius + ball.radius + 5:
+            self.kick_towards_goal(ball, target_goal)
+
+        # Ограничение выхода за границы поля
+        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
+        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
+
+
+    def kick_towards_goal(self, ball, goal):
+
+        # центр ворот
+        target_x = goal.rect.centerx
+        target_y = goal.rect.centery
+
+        dx = target_x - ball.x
+        dy = target_y - ball.y
+
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        if distance == 0:
+            return
+
+        # нормализация
+        dx /= distance
+        dy /= distance
+
+        kick_force = 8
+
+        ball.vx = dx * kick_force
+        ball.vy = dy * kick_force
+
+
 class Ball:
     def __init__(self, x, y):
         self.x = x
@@ -205,6 +258,9 @@ def main():
     left_score = 0
     right_score = 0
 
+    # AI игрок
+    enemy = AIPlayer(WIDTH // 2 + 150, HEIGHT // 2, RED)
+
     while running:
         clock.tick(FPS)
 
@@ -225,6 +281,7 @@ def main():
 
         # Обновление
         ball.update()
+        enemy.update(ball, left_goal)
 
         # Проверка гола
         goal = goal_check(ball, left_goal, right_goal)
@@ -259,6 +316,7 @@ def main():
         # Объекты
         ball.draw(screen)
         player.draw(screen)
+        enemy.draw(screen)
         
         # Счет
         score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
