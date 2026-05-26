@@ -21,6 +21,10 @@ BALL_FRICTION = 0.98
 GOAL_WIDTH = 20
 GOAL_HEIGHT = 200
 
+CHASE_BALL = 'CHASE_BALL'
+ATTACK = 'ATTACK'
+RETURN_HOME = 'RETURN_HOME'
+
 pygame.init()
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -90,32 +94,97 @@ class Player:
 
 class AIPlayer(Player):
     
+    def __init__(self, x, y, color):
+        super().__init__(x, y, color)
+
+        self.state = CHASE_BALL
+
+        # домашняя позиция для возврата
+        self.home_x = x
+        self.home_y = y
+
+
     def update(self, ball, target_goal):
+
+        # Расстояние до мяча
+        dx = ball.x - self.x
+        dy = ball.y - self.y
+
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        # Выбор состояния
+
+        # Если мяч рядом - атака
+        if distance < 80:
+            self.state = ATTACK
+
+        # Если мяч очень далеко - домой
+        elif distance > 400:
+            self.state = RETURN_HOME
+
+        # Иначе - догнать мяч
+        else:
+            self.state = CHASE_BALL
+
+        # Поведение состояний
+        if self.state == CHASE_BALL:
+            self.chase_ball(ball)
+        elif self.state == ATTACK:
+            self.attack(ball, target_goal)
+        elif self.state == RETURN_HOME:
+            self.return_home()
+
+        # Ограничение выхода за границы поля
+        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
+        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
+
+
+    def chase_ball(self, ball):
+        
+        dx = ball.x - self.x
+        dy = ball.y - self.y
+
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        if distance == 0:
+            return
+        
+        dx /= distance
+        dy /= distance
+
+        self.x += dx * self.speed
+        self.y += dy * self.speed
+
+
+    def attack(self, ball, target_goal):
+
+        self.chase_ball(ball)
 
         dx = ball.x - self.x
         dy = ball.y - self.y
 
         distance = math.sqrt(dx ** 2 + dy ** 2)
 
-        # Движение к мячу
-        if distance != 0:
-
-            # Нормализуем вектор движения
-            dx /= distance
-            dy /= distance
-
-            # Двигаемся в сторону мяча
-            self.x += dx * self.speed
-            self.y += dy * self.speed
-
-        # Удар по мячу
         if distance < self.radius + ball.radius + 5:
             self.kick_towards_goal(ball, target_goal)
 
-        # Ограничение выхода за границы поля
-        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
-        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
+    
+    def return_home(self):
 
+        dx = self.home_x - self.x
+        dy = self.home_y - self.y
+
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        if distance == 0:
+            return
+        
+        dx /= distance
+        dy /= distance
+
+        self.x += dx * self.speed
+        self.y += dy * self.speed
+        
 
     def kick_towards_goal(self, ball, goal):
 
