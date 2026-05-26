@@ -21,6 +21,8 @@ BALL_FRICTION = 0.98
 GOAL_WIDTH = 20
 GOAL_HEIGHT = 200
 
+GRID_SIZE = 40
+
 CHASE_BALL = 'CHASE_BALL'
 ATTACK = 'ATTACK'
 RETURN_HOME = 'RETURN_HOME'
@@ -142,14 +144,22 @@ class AIPlayer(Player):
 
     def chase_ball(self, ball):
         
-        dx = ball.x - self.x
-        dy = ball.y - self.y
+        next_cell = get_next_step(
+            (self.x, self.y),
+            (ball.x, ball.y)
+        )
+
+        target_x = next_cell[0] * GRID_SIZE + GRID_SIZE // 2
+        target_y = next_cell[1] * GRID_SIZE + GRID_SIZE // 2
+
+        dx = target_x - self.x
+        dy = target_y - self.y
 
         distance = math.sqrt(dx ** 2 + dy ** 2)
 
         if distance == 0:
             return
-        
+
         dx /= distance
         dy /= distance
 
@@ -318,6 +328,7 @@ def resolve_collision(player1, player2):
 
 
 def handle_ball_possesion(player, ball):
+    """Обрабатывает владение мячом"""
 
     dx = ball.x - player.x
     dy = ball.y - player.y
@@ -337,6 +348,39 @@ def handle_ball_possesion(player, ball):
 
             ball.x = player.x + dx * offset
             ball.y = player.y + dy * offset
+
+
+def to_grid(x, y):
+    """"Преобразует пиксели в координаты сетки grid"""
+
+    grid_x = int(x // GRID_SIZE)
+    grid_y = int(y // GRID_SIZE)
+
+    return (grid_x, grid_y)
+
+
+def get_next_step(start, target):
+    """Поиск следующего шага для пути"""
+
+    start_grid = to_grid(start[0], start[1])
+    target_grid = to_grid(target[0], target[1])
+
+    current_x, current_y = start_grid
+    target_x, target_y = target_grid
+
+    # Движение по x
+    if current_x < target_x:
+        current_x += 1
+    elif current_x > target_x:
+        current_x -= 1
+
+    # Движение по y
+    if current_y < target_y:
+        current_y += 1
+    elif current_y > target_y:
+        current_y -= 1
+
+    return (current_x, current_y)
 
 
 def goal_check(ball, left_goal, right_goal):
@@ -434,6 +478,23 @@ def main():
         # Отрисовка
         draw_field()
         
+        # сетка
+        for x in range(0, WIDTH, GRID_SIZE):
+            pygame.draw.line(
+                screen,
+                (50, 180, 80),
+                (x, 0),
+                (x, HEIGHT)
+            )
+
+        for y in range(0, HEIGHT, GRID_SIZE):
+            pygame.draw.line(
+                screen,
+                (50, 180, 80),
+                (0, y),
+                (WIDTH, y)
+            )
+
         # Ворота
         left_goal.draw(screen)
         right_goal.draw(screen)
