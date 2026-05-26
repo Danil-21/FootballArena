@@ -41,6 +41,7 @@ class Player:
         self.color = color
         self.radius = PLAYER_RADIUS
         self.speed = PLAYER_SPEED
+        self.has_ball = False
 
 
     def move(self, keys):
@@ -286,6 +287,58 @@ def draw_field():
                        )
     
 
+def resolve_collision(player1, player2):
+    """Разрешает столкновение между двумя игроками"""
+
+    dx = player2.x - player1.x
+    dy = player2.y - player1.y
+
+    distance = math.sqrt(dx ** 2 + dy ** 2)
+
+    min_distance = player1.radius + player2.radius
+
+    # Если нет столкновения
+    if distance >= min_distance:
+        return
+    if distance == 0:
+        return
+    
+    # Насколько объекты пересекаются
+    overlap = min_distance - distance
+
+    dx /= distance
+    dy /= distance
+
+    # Раздвигаем объекты
+    player1.x -= dx * (overlap / 2)
+    player1.y -= dy * (overlap / 2)
+
+    player2.x += dx * (overlap / 2)
+    player2.y += dy * (overlap / 2)
+
+
+def handle_ball_possesion(player, ball):
+
+    dx = ball.x - player.x
+    dy = ball.y - player.y
+
+    distance = math.sqrt(dx ** 2 + dy ** 2)
+
+    # Мяч рядом - игрок может владеть мячом
+    if distance < player.radius + ball.radius + 8:
+        player.has_ball = True
+
+        # Позиция мяча перед игроком
+        if distance != 0:
+            dx /= distance
+            dy /= distance
+
+            offset = player.radius + ball.radius + 2
+
+            ball.x = player.x + dx * offset
+            ball.y = player.y + dy * offset
+
+
 def goal_check(ball, left_goal, right_goal):
     """Проверяет, забит ли гол"""
 
@@ -351,6 +404,9 @@ def main():
         # Обновление
         ball.update()
         enemy.update(ball, left_goal)
+        resolve_collision(player, enemy)
+        handle_ball_possesion(player, ball)
+        handle_ball_possesion(enemy, ball)
 
         # Проверка гола
         goal = goal_check(ball, left_goal, right_goal)
