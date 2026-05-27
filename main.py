@@ -107,7 +107,7 @@ class AIPlayer(Player):
         self.home_y = y
 
 
-    def update(self, ball, target_goal):
+    def update(self, ball, target_goal, teammates):
 
         # Расстояние до мяча
         dx = ball.x - self.x
@@ -133,7 +133,7 @@ class AIPlayer(Player):
         if self.state == CHASE_BALL:
             self.chase_ball(ball)
         elif self.state == ATTACK:
-            self.attack(ball, target_goal)
+            self.attack(ball, target_goal, teammates)
         elif self.state == RETURN_HOME:
             self.return_home()
 
@@ -167,7 +167,7 @@ class AIPlayer(Player):
         self.y += dy * self.speed
 
 
-    def attack(self, ball, target_goal):
+    def attack(self, ball, target_goal, teammates):
 
         self.chase_ball(ball)
 
@@ -176,7 +176,17 @@ class AIPlayer(Player):
 
         distance = math.sqrt(dx ** 2 + dy ** 2)
 
+        # Если мяч рядом
         if distance < self.radius + ball.radius + 5:
+            
+            teammate = self.find_best_teammate(teammates)
+
+            # Если союзник ближе к воротам
+            if teammate is not None and teammate.x < self.x:
+                self.pass_ball(ball, teammate)
+            else:
+                self.kick_towards_goal(ball, target_goal)
+            
             self.kick_towards_goal(ball, target_goal)
 
     
@@ -219,6 +229,43 @@ class AIPlayer(Player):
 
         ball.vx = dx * kick_force
         ball.vy = dy * kick_force
+
+        
+    def find_best_teammate(self, teammates):
+
+        best_teammate = None
+        best_score = -999999
+
+        for teammate in teammates:
+            if teammate == self:
+                continue
+            # Чем левее, тем ближе к воротам противника
+            score = -teammate.x
+
+            if score > best_score:
+                best_score = score
+                best_teammate = teammate
+
+        return best_teammate
+    
+
+    def pass_ball(self, ball, teammate):
+
+        dx = teammate.x - ball.x
+        dy = teammate.y - ball.y
+
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+        if distance == 0:
+            return
+        
+        dx /= distance
+        dy /= distance
+
+        pass_force = 7
+
+        ball.vx = dx * pass_force
+        ball.vy = dy * pass_force
 
 
 class Ball:
@@ -426,6 +473,7 @@ def main():
 
     # AI игрок
     enemy = AIPlayer(WIDTH // 2 + 150, HEIGHT // 2, RED)
+    enemy2 = AIPlayer(WIDTH // 2 + 150, HEIGHT // 2 + 100, RED)
 
     while running:
         clock.tick(FPS)
@@ -447,10 +495,17 @@ def main():
 
         # Обновление
         ball.update()
-        enemy.update(ball, left_goal)
+        enemies = [enemy, enemy2]
+        enemy.update(ball, left_goal, enemies)
+        enemy2.update(ball, left_goal, enemies)
+
         resolve_collision(player, enemy)
+        resolve_collision(player, enemy2)
+        resolve_collision(enemy, enemy2)
+
         handle_ball_possesion(player, ball)
         handle_ball_possesion(enemy, ball)
+        handle_ball_possesion(enemy2, ball)
 
         # Проверка гола
         goal = goal_check(ball, left_goal, right_goal)
@@ -503,6 +558,7 @@ def main():
         ball.draw(screen)
         player.draw(screen)
         enemy.draw(screen)
+        enemy2.draw(screen)
         
         # Счет
         score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
