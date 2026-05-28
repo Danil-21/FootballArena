@@ -7,6 +7,26 @@ WIDTH = 1200
 HEIGHT = 700
 FPS = 60
 
+GAME_TIME = 120
+
+MENU = "MENU"
+PLAYING = "PLAYING"
+PAUSED = "PAUSED"
+GOAL_RESET = "GOAL_RESET"
+GAME_OVER = "GAME_OVER"
+
+DIFFICULTY = "NORMAL"
+
+if DIFFICULTY == "EASY":
+    PLAYER_SPEED = 6
+    kick_force = 10
+elif DIFFICULTY == "HARD":
+    PLAYER_SPEED = 5
+    kick_force = 12
+else:
+    PLAYER_SPEED = 5
+    kick_force = 10
+
 GREEN = (30, 160, 60)
 WHITE = (255, 255, 255)
 BLUE = (50, 80, 255)
@@ -26,6 +46,8 @@ GRID_SIZE = 40
 CHASE_BALL = 'CHASE_BALL'
 ATTACK = 'ATTACK'
 RETURN_HOME = 'RETURN_HOME'
+
+DIFFICULTY = "NORMAL"
 
 pygame.init()
 
@@ -97,14 +119,18 @@ class Player:
 
 class AIPlayer(Player):
     
-    def __init__(self, x, y, color):
+    def __init__(self, x, y, color, role):
         super().__init__(x, y, color)
 
+        self.speed = PLAYER_SPEED - 4
         self.state = CHASE_BALL
+        self.role = role
+        self.defend_goal = None
+        self.attack_goal = None
 
         # домашняя позиция для возврата
-        self.home_x = x
-        self.home_y = y
+        self.home_x = WIDTH - 300
+        self.home_y = HEIGHT // 2
 
 
     def update(self, ball, target_goal, teammates):
@@ -116,18 +142,32 @@ class AIPlayer(Player):
         distance = math.sqrt(dx ** 2 + dy ** 2)
 
         # Выбор состояния
+        if self.role == "ATTACKER":
 
-        # Если мяч рядом - атака
-        if distance < 80:
-            self.state = ATTACK
+            if not self.is_closest_to_ball(teammates, ball):
+                self.state = RETURN_HOME
 
-        # Если мяч очень далеко - домой
-        elif distance > 400:
-            self.state = RETURN_HOME
+            if distance < 80:
+                self.state = ATTACK
+            elif distance > 400:
+                self.state = RETURN_HOME
+            else:
+                self.state = CHASE_BALL
+        elif self.role == "DEFENDER":
+            # зона защиты (между мячом и воротами)
+            goal_x = self.defend_goal.rect.centerx
+            goal_y = self.defend_goal.rect.centery
 
-        # Иначе - догнать мяч
-        else:
-            self.state = CHASE_BALL
+            # расстояние до ворот (ВАЖНО!)
+            ball_to_goal = math.sqrt(
+                (ball.x - goal_x)**2 + (ball.y - goal_y)**2
+            )
+
+            # если мяч ближе к нашим воротам — защищаем
+            if ball_to_goal < 350:
+                self.state = CHASE_BALL
+            else:
+                self.state = RETURN_HOME
 
         # Поведение состояний
         if self.state == CHASE_BALL:
@@ -179,15 +219,13 @@ class AIPlayer(Player):
         # Если мяч рядом
         if distance < self.radius + ball.radius + 5:
             
-            teammate = self.find_best_teammate(teammates)
+            teammate = self.find_best_teammate(teammates, ball)
 
             # Если союзник ближе к воротам
             if teammate is not None and teammate.x < self.x:
                 self.pass_ball(ball, teammate)
             else:
-                self.kick_towards_goal(ball, target_goal)
-            
-            self.kick_towards_goal(ball, target_goal)
+                self.kick_towards_goal(ball, self.attack_goal)
 
     
     def return_home(self):
@@ -231,7 +269,7 @@ class AIPlayer(Player):
         ball.vy = dy * kick_force
 
         
-    def find_best_teammate(self, teammates):
+    def find_best_teammate(self, teammates, ball):
 
         best_teammate = None
         best_score = -999999
@@ -240,7 +278,14 @@ class AIPlayer(Player):
             if teammate == self:
                 continue
             # Чем левее, тем ближе к воротам противника
-            score = -teammate.x
+            score = 0
+
+            # ближе к воротам — лучше
+            score += (WIDTH - teammate.x) * 2
+
+            # ближе к мячу — лучше
+            score -= abs(teammate.x - ball.x)
+            score -= abs(teammate.y - ball.y)
 
             if score > best_score:
                 best_score = score
@@ -266,6 +311,19 @@ class AIPlayer(Player):
 
         ball.vx = dx * pass_force
         ball.vy = dy * pass_force
+
+
+    def is_closest_to_ball(self, teammates, ball):
+
+        my_dist = math.sqrt((self.x - ball.x)**2 + (self.y - ball.y)**2)
+
+        for t in teammates:
+            if t == self:
+                continue
+            if abs(t.x - ball.x) < my_dist:
+                return False
+
+        return True
 
 
 class Ball:
@@ -374,7 +432,7 @@ def resolve_collision(player1, player2):
     player2.y += dy * (overlap / 2)
 
 
-def handle_ball_possesion(player, ball):
+def handle_ball_possession(player, ball):
     """Обрабатывает владение мячом"""
 
     dx = ball.x - player.x
@@ -382,19 +440,41 @@ def handle_ball_possesion(player, ball):
 
     distance = math.sqrt(dx ** 2 + dy ** 2)
 
-    # Мяч рядом - игрок может владеть мячом
-    if distance < player.radius + ball.radius + 8:
+    control_distance = player.radius + ball.radius + 12
+
+    # игрок контролирует мяч
+    if distance < control_distance:
+
         player.has_ball = True
 
-        # Позиция мяча перед игроком
-        if distance != 0:
-            dx /= distance
-            dy /= distance
+        # защита от деления на ноль
+        if distance == 0:
+            return
 
-            offset = player.radius + ball.radius + 2
+        # направление
+        dx /= distance
+        dy /= distance
 
-            ball.x = player.x + dx * offset
-            ball.y = player.y + dy * offset
+        # точка контроля перед игроком
+        target_x = player.x + dx * control_distance
+        target_y = player.y + dy * control_distance
+
+        # мягкое притягивание мяча
+        follow_strength = 0.25
+
+        ball.vx += (target_x - ball.x) * follow_strength * 0.1
+        ball.vy += (target_y - ball.y) * follow_strength * 0.1
+
+        # ВАЖНО: ограничиваем скорость
+        max_speed = 6
+        speed = math.sqrt(ball.vx**2 + ball.vy**2)
+
+        if speed > max_speed:
+            scale = max_speed / speed
+            ball.vx *= scale
+            ball.vy *= scale
+    else:
+        player.has_ball = False
 
 
 def to_grid(x, y):
@@ -444,10 +524,31 @@ def goal_check(ball, left_goal, right_goal):
     return None
 
 
+def reset_positions(player, player2, enemy, enemy2, ball):
+    player.x, player.y = WIDTH // 2 - 100, HEIGHT // 2 + 80
+    player2.x, player2.y = WIDTH // 2 - 100, HEIGHT // 2 - 80
+
+    enemy.x, enemy.y = WIDTH - 250, HEIGHT // 2 - 120
+    enemy2.x, enemy2.y = WIDTH - 350, HEIGHT // 2 + 120
+
+    ball.x, ball.y = WIDTH//2, HEIGHT//2
+    ball.vx = 0
+    ball.vy = 0
+
+
 def main():
     running = True
 
-    player = Player(WIDTH // 2, HEIGHT // 2, BLUE)
+    start_button = pygame.Rect(WIDTH//2 - 120, HEIGHT//2 - 40, 240, 60)
+    quit_button = pygame.Rect(WIDTH//2 - 120, HEIGHT//2 + 40, 240, 60)
+
+    game_state = MENU
+    reset_timer = 0
+
+    start_ticks = pygame.time.get_ticks()
+
+    player = Player(WIDTH // 2 - 100, HEIGHT // 2 + 80, BLUE)
+    player2 = AIPlayer(WIDTH // 2 - 100, HEIGHT // 2 - 80, BLUE, 'ATTACKER')
     ball = Ball(WIDTH // 2 + 150, HEIGHT // 2)
 
     # Ворота
@@ -472,11 +573,55 @@ def main():
     right_score = 0
 
     # AI игрок
-    enemy = AIPlayer(WIDTH // 2 + 150, HEIGHT // 2, RED)
-    enemy2 = AIPlayer(WIDTH // 2 + 150, HEIGHT // 2 + 100, RED)
+    enemy = AIPlayer(WIDTH - 250, HEIGHT // 2 - 120, RED, 'ATTACKER')
+    enemy2 = AIPlayer(WIDTH - 350, HEIGHT // 2 + 120, RED, 'DEFENDER')
+
+    enemy.defend_goal = right_goal
+    enemy.attack_goal = left_goal
+
+    enemy2.defend_goal = right_goal
+    enemy2.attack_goal = left_goal
+
+    player2.defend_goal = left_goal
+    player2.attack_goal = right_goal
 
     while running:
         clock.tick(FPS)
+
+        if game_state == MENU:
+            screen.fill(GREEN)
+
+            title = font.render("FOOTBALL ARENA", True, WHITE)
+            screen.blit(title, (WIDTH//2 - 200, HEIGHT // 2 - 150))
+            
+            mouse = pygame.mouse.get_pos()
+
+            # START button
+            pygame.draw.rect(screen, WHITE, start_button, 2)
+            start_text = font.render("Старт", True, WHITE)
+            screen.blit(start_text, (start_button.x + 70, start_button.y + 10))
+
+            # QUIT button
+            pygame.draw.rect(screen, WHITE, quit_button, 2)
+            quit_text = font.render("Выход", True, WHITE)
+            screen.blit(quit_text, (quit_button.x + 80, quit_button.y + 10))
+
+            pygame.display.flip()
+
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                    game_state = PLAYING
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if start_button.collidepoint(event.pos):
+                        game_state = PLAYING
+
+                    if quit_button.collidepoint(event.pos):
+                        running = False
+
+            continue
 
         # Обработка событий
         for event in pygame.event.get():
@@ -488,24 +633,41 @@ def main():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     player.kick_ball(ball)
+                if event.key == pygame.K_p:
+                    if game_state == PLAYING:
+                        game_state = PAUSED
+                    elif game_state == PAUSED:
+                        game_state = PLAYING
         
+        if game_state == PAUSED:
+            screen.blit(font.render("PAUSED", True, WHITE), (WIDTH//2 - 80, HEIGHT//2))
+            pygame.display.flip()
+            continue
+
         # Управление
         keys = pygame.key.get_pressed()
         player.move(keys)
+        # player2.move(keys)
 
         # Обновление
         ball.update()
         enemies = [enemy, enemy2]
+        players = [player, player2]
         enemy.update(ball, left_goal, enemies)
         enemy2.update(ball, left_goal, enemies)
+        player2.update(ball, right_goal, players)
 
         resolve_collision(player, enemy)
         resolve_collision(player, enemy2)
         resolve_collision(enemy, enemy2)
+        resolve_collision(player, player2)
+        resolve_collision(player2, enemy)
+        resolve_collision(player2, enemy2)
 
-        handle_ball_possesion(player, ball)
-        handle_ball_possesion(enemy, ball)
-        handle_ball_possesion(enemy2, ball)
+        handle_ball_possession(player, ball)
+        handle_ball_possession(player2, ball)
+        handle_ball_possession(enemy, ball)
+        handle_ball_possession(enemy2, ball)
 
         # Проверка гола
         goal = goal_check(ball, left_goal, right_goal)
@@ -513,22 +675,15 @@ def main():
         if goal == 'LEFT':
             left_score += 1
 
-            # Сброс мяча в центр
-            ball.x = WIDTH // 2
-            ball.y = HEIGHT // 2
-
-            ball.vx = 0
-            ball.vy = 0
-        
+            reset_positions(player, player2, enemy, enemy2, ball)
+            game_state = GOAL_RESET
+            reset_timer = pygame.time.get_ticks()
         if goal == 'RIGHT':
             right_score += 1
 
-            # Сброс мяча в центр
-            ball.x = WIDTH // 2
-            ball.y = HEIGHT // 2
-
-            ball.vx = 0
-            ball.vy = 0
+            reset_positions(player, player2, enemy, enemy2, ball)
+            game_state = GOAL_RESET
+            reset_timer = pygame.time.get_ticks()
 
         # Отрисовка
         draw_field()
@@ -557,6 +712,7 @@ def main():
         # Объекты
         ball.draw(screen)
         player.draw(screen)
+        player2.draw(screen)
         enemy.draw(screen)
         enemy2.draw(screen)
         
@@ -564,6 +720,14 @@ def main():
         score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
 
         screen.blit(score_text, (WIDTH // 2 - 40, 20))
+
+         # Таймер
+        seconds = GAME_TIME - (pygame.time.get_ticks() - start_ticks) // 1000
+        time_text = font.render(f"Time: {seconds}", True, WHITE)
+        screen.blit(time_text, (20, 20))
+        if seconds <= 0:
+            seconds = 0
+            running = False
 
         pygame.display.flip()
 
