@@ -1,3 +1,5 @@
+from turtle import title
+
 import pygame
 import sys
 import math
@@ -50,6 +52,11 @@ RETURN_HOME = 'RETURN_HOME'
 DIFFICULTY = "NORMAL"
 
 pygame.init()
+
+field_image = pygame.image.load("FootballArena/assets/footballField.png")
+field_image = pygame.transform.scale(field_image, (WIDTH, HEIGHT))
+menu_image = pygame.image.load("FootballArena/assets/menuBack.jpg")
+menu_image = pygame.transform.scale(menu_image, (WIDTH, HEIGHT))
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Football Arena")
@@ -122,7 +129,7 @@ class AIPlayer(Player):
     def __init__(self, x, y, color, role):
         super().__init__(x, y, color)
 
-        self.speed = PLAYER_SPEED - 4
+        self.speed = PLAYER_SPEED - 2
         self.state = CHASE_BALL
         self.role = role
         self.defend_goal = None
@@ -385,21 +392,22 @@ def draw_field():
     """
     Рисует футбольное поле с разметкой
     """
-    screen.fill(GREEN)
+    # screen.fill(GREEN)
+    screen.blit(field_image, (0, 0))
 
     # Центральная линия
-    pygame.draw.line(screen, WHITE,
-                     ((WIDTH // 2), 0),
-                     (WIDTH // 2, HEIGHT), 
-                     3
-                     )
+    # pygame.draw.line(screen, WHITE,
+    #                  ((WIDTH // 2), 0),
+    #                  (WIDTH // 2, HEIGHT), 
+    #                  3
+    #                  )
     
-    # Центральный круг
-    pygame.draw.circle(screen, WHITE,
-                       (WIDTH // 2, HEIGHT // 2),
-                       80, 
-                       3
-                       )
+    # # Центральный круг
+    # pygame.draw.circle(screen, WHITE,
+    #                    (WIDTH // 2, HEIGHT // 2),
+    #                    80, 
+    #                    3
+    #                    )
     
 
 def resolve_collision(player1, player2):
@@ -541,6 +549,8 @@ def main():
 
     start_button = pygame.Rect(WIDTH//2 - 120, HEIGHT//2 - 40, 240, 60)
     quit_button = pygame.Rect(WIDTH//2 - 120, HEIGHT//2 + 40, 240, 60)
+    restart_button = pygame.Rect(WIDTH//2 - 120, HEIGHT//2, 240, 60)
+    quit_gameover_button = pygame.Rect(WIDTH//2 - 120, HEIGHT//2 + 80, 240, 60)
 
     game_state = MENU
     reset_timer = 0
@@ -589,24 +599,28 @@ def main():
         clock.tick(FPS)
 
         if game_state == MENU:
-            screen.fill(GREEN)
+            # screen.fill(GREEN)
+            screen.blit(menu_image, (0, 0))
 
             title = font.render("FOOTBALL ARENA", True, WHITE)
-            screen.blit(title, (WIDTH//2 - 200, HEIGHT // 2 - 150))
-            
+            title_rect = title.get_rect(center=(WIDTH//2, HEIGHT//2 - 150))
+            screen.blit(title, title_rect)
+
             mouse = pygame.mouse.get_pos()
 
             # START button
             pygame.draw.rect(screen, WHITE, start_button, 2)
             start_text = font.render("Старт", True, WHITE)
-            screen.blit(start_text, (start_button.x + 70, start_button.y + 10))
+            # screen.blit(start_text, (start_button.x + 70, start_button.y + 10))
+            start_rect = start_text.get_rect(center=start_button.center)
+            screen.blit(start_text, start_rect)
 
             # QUIT button
             pygame.draw.rect(screen, WHITE, quit_button, 2)
             quit_text = font.render("Выход", True, WHITE)
-            screen.blit(quit_text, (quit_button.x + 80, quit_button.y + 10))
-
-            pygame.display.flip()
+            # screen.blit(quit_text, (quit_button.x + 80, quit_button.y + 10))
+            quit_rect = quit_text.get_rect(center=quit_button.center)
+            screen.blit(quit_text, quit_rect)
 
             pygame.display.flip()
 
@@ -643,6 +657,48 @@ def main():
             screen.blit(font.render("PAUSED", True, WHITE), (WIDTH//2 - 80, HEIGHT//2))
             pygame.display.flip()
             continue
+        
+        if game_state == GAME_OVER:
+            screen.fill(GREEN)
+
+            result_text = font.render("GAME OVER", True, WHITE)
+            score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
+
+            screen.blit(result_text, (WIDTH // 2 - 120, HEIGHT // 2 - 150))
+            screen.blit(score_text, (WIDTH // 2 - 80, HEIGHT // 2 - 100))
+
+            mouse = pygame.mouse.get_pos()
+
+            # RESTART
+            pygame.draw.rect(screen, WHITE, restart_button, 2)
+            restart_text = font.render("RESTART", True, WHITE)
+            screen.blit(restart_text, (restart_button.x + 40, restart_button.y + 10))
+
+            # QUIT
+            pygame.draw.rect(screen, WHITE, quit_gameover_button, 2)
+            quit_text = font.render("QUIT", True, WHITE)
+            screen.blit(quit_text, (quit_gameover_button.x + 80, quit_gameover_button.y + 10))
+
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if restart_button.collidepoint(event.pos):
+                        # сброс игры
+                        left_score = 0
+                        right_score = 0
+                        reset_positions(player, player2, enemy, enemy2, ball)
+                        start_ticks = pygame.time.get_ticks()
+                        game_state = PLAYING
+
+                    if quit_gameover_button.collidepoint(event.pos):
+                        running = False
+
+            continue
+
 
         # Управление
         keys = pygame.key.get_pressed()
@@ -692,7 +748,7 @@ def main():
         for x in range(0, WIDTH, GRID_SIZE):
             pygame.draw.line(
                 screen,
-                (50, 180, 80),
+                (40, 120, 60),
                 (x, 0),
                 (x, HEIGHT)
             )
@@ -700,7 +756,7 @@ def main():
         for y in range(0, HEIGHT, GRID_SIZE):
             pygame.draw.line(
                 screen,
-                (50, 180, 80),
+                (40, 120, 60),
                 (0, y),
                 (WIDTH, y)
             )
@@ -718,16 +774,24 @@ def main():
         
         # Счет
         score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
-
-        screen.blit(score_text, (WIDTH // 2 - 40, 20))
+        # screen.blit(score_text, (WIDTH // 2 - 40, 20))
+        score_rect = score_text.get_rect(center=(WIDTH // 2, 40))
+        screen.blit(score_text, score_rect)
 
          # Таймер
         seconds = GAME_TIME - (pygame.time.get_ticks() - start_ticks) // 1000
-        time_text = font.render(f"Time: {seconds}", True, WHITE)
-        screen.blit(time_text, (20, 20))
+        # time_text = font.render(f"Time: {seconds}", True, WHITE)
+        minutes = seconds // 60
+        secs = seconds % 60
+
+        timer_string = f"{minutes:02}:{secs:02}"
+
+        time_text = font.render(timer_string, True, WHITE)
+        time_rect = time_text.get_rect(center=(WIDTH // 2, 90))
+        screen.blit(time_text, time_rect)
+        # screen.blit(time_text, (20, 20))
         if seconds <= 0:
-            seconds = 0
-            running = False
+            game_state = GAME_OVER
 
         pygame.display.flip()
 
