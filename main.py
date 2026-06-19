@@ -19,15 +19,22 @@ GAME_OVER = "GAME_OVER"
 
 DIFFICULTY = "NORMAL"
 
-if DIFFICULTY == "EASY":
-    PLAYER_SPEED = 6
-    kick_force = 10
-elif DIFFICULTY == "HARD":
-    PLAYER_SPEED = 5
-    kick_force = 12
-else:
-    PLAYER_SPEED = 5
-    kick_force = 10
+GAME_CONFIG = {
+    "EASY": {
+        "player_speed": 6,
+        "kick_force": 9
+    },
+    "NORMAL": {
+        "player_speed": 5,
+        "kick_force": 10
+    },
+    "HARD": {
+        "player_speed": 4,
+        "kick_force": 12
+    }
+}
+
+config = GAME_CONFIG[DIFFICULTY]
 
 GREEN = (30, 160, 60)
 WHITE = (255, 255, 255)
@@ -35,7 +42,8 @@ BLUE = (50, 80, 255)
 RED = (255, 50, 50)
 
 PLAYER_RADIUS = 20
-PLAYER_SPEED = 5
+PLAYER_SPEED = config["player_speed"]
+KICK_FORCE = config["kick_force"]
 
 BALL_RADIUS = 10
 BALL_FRICTION = 0.98
@@ -73,9 +81,13 @@ class Player:
         self.radius = PLAYER_RADIUS
         self.speed = PLAYER_SPEED
         self.has_ball = False
+        self.role = 'USER'
 
 
     def move(self, keys):
+        if not keys:
+            return
+        
         # По x
         if keys[pygame.K_a]:
             self.x -= self.speed
@@ -109,7 +121,7 @@ class Player:
             dx /= distance
             dy /= distance
 
-            kick_force = 10
+            kick_force = KICK_FORCE
 
             ball.vx = dx * kick_force
             ball.vy = dy * kick_force
@@ -124,6 +136,11 @@ class Player:
         )
 
 
+    def update(self, keys=None, ball=None, target_goal=None, teammates=None):
+        if keys is not None:
+            self.move(keys)
+
+
 class AIPlayer(Player):
     
     def __init__(self, x, y, color, role):
@@ -132,25 +149,36 @@ class AIPlayer(Player):
         self.speed = PLAYER_SPEED - 2
         self.state = CHASE_BALL
         self.role = role
+        self.task = 'SUPPORT'   # <-- ДОБАВИТЬ ЭТО (защита от ошибки)
         self.defend_goal = None
         self.attack_goal = None
+
+        self.zone_x_min = 0
+        self.zone_x_max = WIDTH
+        self.zone_y_min = 0
+        self.zone_y_max = HEIGHT
 
         # домашняя позиция для возврата
         self.home_x = WIDTH - 300
         self.home_y = HEIGHT // 2
 
 
-    def update(self, ball, target_goal, teammates):
+    def update(self, keys=None, ball=None, target_goal=None, teammates=None):
         """
         Обновление логики игрока AI
         """
-        if self.task == 'PRESS':
+        if self.task is None:
+            return
+        
+        task = getattr(self, 'task', 'SUPPORT')  # Получаем задачу, по умолчанию SUPPORT
+        
+        if task == 'PRESS':
             self.chase_ball(ball)
-        elif self.task == 'ATTACK':
+        elif task == 'ATTACK':
             self.attack(ball, target_goal, teammates)
-        elif self.task == 'DEFEND':
-            self.return_home() # или отдельная функция для защиты ворот
-        elif self.task == 'SUPPORT':
+        elif task == 'DEFEND':
+            self.patrol_zone(ball)
+        elif task == 'SUPPORT':
             # в позицию поддержки
             support_x = self.home_x + 50
             support_y = self.home_y
@@ -312,6 +340,37 @@ class AIPlayer(Player):
         return True
 
 
+    def patrol_zone(self, ball):
+        """Движение внутри своей зоны даже без мяча"""
+        # смещение относительно мяча (чтобы не стоял)
+        target_x = self.x
+        target_y = self.y
+
+        # если мяч в зоне - смещаемся к нему сбоку
+        if self.zone_x_min < ball.x < self.zone_x_max:
+
+            offset_y = 60 if self.role == 'DEFENDER' else -60
+
+            target_x = ball.x
+            target_y = ball.y + offset_y
+
+        else:
+            # возвращение в центр зоны
+            target_x = (self.zone_x_min + self.zone_x_max) / 2
+            target_y = (self.zone_y_min + self.zone_y_max) / 2
+
+        dx = target_x - self.x
+        dy = target_y - self.y
+
+        dist = math.sqrt(dx ** 2 + dy ** 2)
+        if dist != 0:
+            dx /= dist
+            dy /= dist
+
+            self.x += dx * self.speed * 0.7
+            self.y += dy * self.speed * 0.7
+
+
 class Ball:
     def __init__(self, x, y):
         self.x = x
@@ -319,6 +378,7 @@ class Ball:
         self.vx = 0
         self.vy = 0
         self.radius = BALL_RADIUS
+        self.owner = None
 
 
     def update(self):
@@ -424,44 +484,49 @@ def handle_ball_possession(player, ball):
 
     dx = ball.x - player.x
     dy = ball.y - player.y
-
     distance = math.sqrt(dx ** 2 + dy ** 2)
 
-    control_distance = player.radius + ball.radius + 12
+    control_distance = player.radius + ball.radius + 15
 
     # игрок контролирует мяч
     if distance < control_distance:
 
-        player.has_ball = True
+        # если мяч никем не занят - захват
+        if ball.owner is None:
+            ball.owner = player
 
-        # защита от деления на ноль
-        if distance == 0:
-            return
+        # если уже владеет этот игрок - дриблинг
+        if ball.owner == player:
 
-        # направление
-        dx /= distance
-        dy /= distance
+            player.has_ball = True
 
-        # точка контроля перед игроком
-        target_x = player.x + dx * control_distance
-        target_y = player.y + dy * control_distance
+            # направление движения игрока (упрощённо)
+            if distance != 0:
+                dx /= distance
+                dy /= distance
 
-        # мягкое притягивание мяча
-        follow_strength = 0.25
+            # мяч держится ПЕРЕД игроком (важно для футбольного ощущения)
+            target_x = player.x + dx * (player.radius + 18)
+            target_y = player.y + dy * (player.radius + 18)
 
-        ball.vx += (target_x - ball.x) * follow_strength * 0.1
-        ball.vy += (target_y - ball.y) * follow_strength * 0.1
+            # плавное следование мяча за игроком
+            ball.vx += (target_x - ball.x) * 0.25
+            ball.vy += (target_y - ball.y) * 0.25
+        
+        # если мячом владеет другой игрок - отбор
+        elif ball.owner != player:
 
-        # ВАЖНО: ограничиваем скорость
-        max_speed = 6
-        speed = math.sqrt(ball.vx**2 + ball.vy**2)
+            # шанс отбора зависит от дистанции
+            steal_chance = max(0, 1 - (distance / 80))
 
-        if speed > max_speed:
-            scale = max_speed / speed
-            ball.vx *= scale
-            ball.vy *= scale
-    else:
-        player.has_ball = False
+            if steal_chance > 0.6:  # порог для успешного отбора
+                ball.owner = player
+        
+        else:
+            # если ушёл далеко — потерял контроль
+            if ball.owner == player:
+                ball.owner = None
+                player.has_ball = False
 
 
 def to_grid(x, y):
@@ -597,18 +662,45 @@ def main():
     right_score = 0
 
     # Команда пользователя
-    player = Player(WIDTH // 2 - 100, HEIGHT // 2 + 80, BLUE)
+    player = AIPlayer(WIDTH // 2 - 100, HEIGHT // 2 + 80, BLUE, 'MIDFIELDER')
     player2 = AIPlayer(WIDTH // 2 - 100, HEIGHT // 2 - 80, BLUE, 'ATTACKER')
     player3 = AIPlayer(WIDTH // 2 - 200, HEIGHT // 2, BLUE, 'DEFENDER')
 
-    user_team = [player, player2, player3]
+    # зоны USER TEAM
+    player2.zone_x_min = 0
+    player2.zone_x_max = WIDTH * 0.6
+    player2.zone_y_min = 0
+    player2.zone_y_max = HEIGHT
+
+    player3.zone_x_min = 0
+    player3.zone_x_max = WIDTH * 0.6
+    player3.zone_y_min = 0
+    player3.zone_y_max = HEIGHT
     
     # Команда противника
     enemy = AIPlayer(WIDTH - 250, HEIGHT // 2 - 120, RED, 'ATTACKER')
     enemy2 = AIPlayer(WIDTH - 350, HEIGHT // 2 + 120, RED, 'MIDFIELDER')
     enemy3 = AIPlayer(WIDTH - 250, HEIGHT // 2, RED, 'DEFENDER')
 
+    enemy.zone_x_min = WIDTH * 0.4
+    enemy.zone_x_max = WIDTH
+    enemy.zone_y_min = 0
+    enemy.zone_y_max = HEIGHT
+
+    enemy2.zone_x_min = WIDTH * 0.4
+    enemy2.zone_x_max = WIDTH
+    enemy2.zone_y_min = 0
+    enemy2.zone_y_max = HEIGHT
+
+    enemy3.zone_x_min = WIDTH * 0.4
+    enemy3.zone_x_max = WIDTH
+    enemy3.zone_y_min = 0
+    enemy3.zone_y_max = HEIGHT
+
+    user_team = [player, player2, player3]
     enemy_team = [enemy, enemy2, enemy3]
+
+
 
     # Домашние позиции для AI
     for p in user_team[1:]:
@@ -665,13 +757,25 @@ def main():
 
             # Удар по space
             if event.type == pygame.KEYDOWN:
+
+                # Удар по мячу активным игроком
                 if event.key == pygame.K_SPACE:
-                    player.kick_ball(ball)
+                    active_player.kick_ball(ball)
+                
+                # Пауза по P
                 if event.key == pygame.K_p:
                     if game_state == PLAYING:
                         game_state = PAUSED
                     elif game_state == PAUSED:
                         game_state = PLAYING
+                
+                # Переключение активного игрока по TAB
+                if event.key == pygame.K_TAB:
+                    index = user_team.index(active_player)
+                    index = (index + 1) % len(user_team)
+                    active_player = user_team[index]
+                    for p in user_team:
+                        p.task = None
         
         if game_state == PAUSED:
             screen.blit(font.render("PAUSED", True, WHITE), (WIDTH//2 - 80, HEIGHT//2))
@@ -724,29 +828,36 @@ def main():
             continue
 
 
-        # Управление
-
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_TAB:
-                    index = user_team.index(active_player)
-                    index = (index + 1) % len(user_team)
-                    active_player = user_team[index]
+        # Управление активным игроком
 
         keys = pygame.key.get_pressed()
-        active_player.move(keys)
-        # player2.move(keys)
-
-        # Обновление
-        assign_team_tasks(user_team[1:], ball, left_goal, right_goal)
-        assign_team_tasks(enemy_team, ball, right_goal, left_goal)
-        ball.update()
+        # active_player.update(keys=keys)
         
-        # Обновление всех игроков
-        for p in user_team[1:]:
-            p.update(ball, right_goal, user_team[1:])
+        # Союзники, которыми сейчас управляет AI.
+        # Активного игрока сюда не добавляем, потому что им управляет пользователь.
+        for p in user_team:
+            if p != active_player:
+                p.task = None
+        
+        ai_user_team = [p for p in user_team if p != active_player]
+        
+        # Назначаем задачи только тем союзникам, которые сейчас под управлением AI
+        assign_team_tasks(ai_user_team, ball, left_goal, right_goal)
+
+        # Противники всегда под управлением AI, поэтому назначаем задачи всем
+        assign_team_tasks(enemy_team, ball, right_goal, left_goal)
+
+        ball.update()
+
+        # Обновление только игроков, которыми управляет AI
+        for p in user_team:
+            if p == active_player:
+                p.move(keys)
+            else:
+                p.update(ball=ball, target_goal=right_goal, teammates=user_team)
+        # Противники всегда под управлением AI, поэтому обновляем всех
         for e in enemy_team:
-            e.update(ball, left_goal, enemy_team)
+            e.update(ball=ball, target_goal=left_goal, teammates=enemy_team)
 
         # Столкновения между игроками
         all_players = user_team + enemy_team
