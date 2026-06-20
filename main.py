@@ -57,6 +57,9 @@ CHASE_BALL = 'CHASE_BALL'
 ATTACK = 'ATTACK'
 RETURN_HOME = 'RETURN_HOME'
 
+TEAM_ATTACK = 'TEAM_ATTACK'
+TEAM_DEFEND = 'TEAM_DEFEND'
+
 DIFFICULTY = "NORMAL"
 
 pygame.init()
@@ -163,33 +166,27 @@ class AIPlayer(Player):
         self.home_y = HEIGHT // 2
 
 
-    def update(self, keys=None, ball=None, target_goal=None, teammates=None):
+    def update(self, keys=None, ball=None, target_goal=None, teammates=None, enemies=None):
         """
         Обновление логики игрока AI
         """
         if self.task is None:
             return
         
-        task = getattr(self, 'task', 'SUPPORT')  # Получаем задачу, по умолчанию SUPPORT
+        # task = getattr(self, 'task', 'SUPPORT')  # Получаем задачу, по умолчанию SUPPORT
         
-        if task == 'PRESS':
+        if self.task == 'PRESS':
             self.chase_ball(ball)
-        elif task == 'ATTACK':
-            self.attack(ball, target_goal, teammates)
-        elif task == 'DEFEND':
+        elif self.task == 'ATTACK':
+            self.attack(ball, target_goal, teammates, enemies)
+        elif self.task == 'DEFEND':
             self.patrol_zone(ball)
-        elif task == 'SUPPORT':
-            # в позицию поддержки
-            support_x = self.home_x + 50
-            support_y = self.home_y
-            dx = support_x - self.x
-            dy = support_y - self.y
-            dist = math.sqrt(dx ** 2 + dy ** 2)
-            if dist != 0:
-                dx /= dist
-                dy /= dist
-                self.x += dx * self.speed
-                self.y += dy * self.speed
+        elif self.task == 'SUPPORT':
+            self.move_to_support_position(ball)
+        elif self.task == 'OPEN_FOR_PASS':
+            self.open_for_pass(ball, target_goal, enemies)
+        elif self.task == 'COVER':
+            self.cover(ball)
 
         # Ограничение выхода за границы поля
         self.x = max(self.radius, min(WIDTH - self.radius, self.x))
@@ -221,25 +218,39 @@ class AIPlayer(Player):
         self.y += dy * self.speed
 
 
-    def attack(self, ball, target_goal, teammates):
+    def attack(self, ball, target_goal, teammates, enemies):
 
-        self.chase_ball(ball)
+        if ball is None or target_goal is None:
+            return
 
-        dx = ball.x - self.x
-        dy = ball.y - self.y
+        # Если игрок ещё не владеет мячом - сначала добежать до мяча
+        if ball.owner != self:
+            self.chase_ball(ball)
+            return
+        
+        goal_x = target_goal.rect.centerx
+        goal_y = target_goal.rect.centery
 
-        distance = math.sqrt(dx ** 2 + dy ** 2)
+        distance_to_goal = math.hypot(self.x - goal_x, self.y - goal_y)
 
-        # Если мяч рядом
-        if distance < self.radius + ball.radius + 5:
-            
-            teammate = self.find_best_teammate(teammates, ball)
+        teammate = self.find_best_teammate(teammates, ball, enemies, target_goal)
 
-            # Если союзник ближе к воротам
-            if teammate is not None and teammate.x < self.x:
-                self.pass_ball(ball, teammate)
-            else:
-                self.kick_towards_goal(ball, target_goal)
+        # Если близко к воротам - бить
+        if distance_to_goal < 320:
+            self.kick_towards_goal(ball, target_goal)
+            ball.owner = None
+            self.has_ball = False
+            return
+        
+        # Если есть хороший пас - пасовать
+        if teammate is not None and self.is_closer_to_goal(teammate, target_goal):
+            self.pass_ball(ball, teammate)
+            ball.owner = None
+            self.has_ball = False
+            return
+        
+        # Иначе - двигаться к воротам
+        self.move_towards(goal_x, goal_y, 0.8)
 
     
     def return_home(self):
@@ -283,23 +294,20 @@ class AIPlayer(Player):
         ball.vy = dy * kick_force
 
         
-    def find_best_teammate(self, teammates, ball):
-
+    def find_best_teammate(self, teammates, ball, enemies, target_goal):
+        """Находит лучшего союзника для паса"""
         best_teammate = None
         best_score = -999999
 
         for teammate in teammates:
+            
             if teammate == self:
                 continue
-            # Чем левее, тем ближе к воротам противника
-            score = 0
+            
+            if not self.is_pass_safe(teammate, enemies):
+                continue
 
-            # ближе к воротам — лучше
-            score += (WIDTH - teammate.x) * 2
-
-            # ближе к мячу — лучше
-            score -= abs(teammate.x - ball.x)
-            score -= abs(teammate.y - ball.y)
+            score = self.evaluate_pass(teammate, ball, enemies, target_goal)
 
             if score > best_score:
                 best_score = score
@@ -371,6 +379,159 @@ class AIPlayer(Player):
             self.y += dy * self.speed * 0.7
 
 
+    def evaluate_pass(self, teammate, ball, enemies, target_goal):
+        """Оценивает безопасность паса"""
+
+        score = 0
+
+        # Чем ближе партнёр к воротам соперника, тем лучше
+        distance_to_goal = math.hypot(
+            target_goal.rect.centerx - teammate.x,
+            target_goal.rect.centery - teammate.y
+        )
+        score -= distance_to_goal * 1.5
+
+        # Слишком дальний пас хуже
+        pass_distance = math.hypot(teammate.x - ball.x, teammate.y - ball.y)
+        score -= pass_distance * 0.4
+
+        # Чем дальше ближайший соперник от партнёра, тем пас безопаснее
+        if enemies:
+            nearest_enemy = min(
+                enemies,
+                key=lambda e: math.hypot(e.x - teammate.x, e.y - teammate.y)
+            )
+
+            enemy_distance = math.hypot(
+                nearest_enemy.x - teammate.x,
+                nearest_enemy.y - teammate.y
+            )
+
+            score += enemy_distance * 3
+
+        return score
+
+
+    def is_pass_safe(self, teammate, enemies):
+
+        ax = self.x
+        ay = self.y
+
+        bx = teammate.x
+        by = teammate.y
+
+        for enemy in enemies:
+
+            ex = enemy.x
+            ey = enemy.y
+
+            abx = bx - ax
+            aby = by - ay
+
+            aex = ex - ax
+            aey = ey - ay
+
+            ab_len_sq = abx * abx + aby * aby
+
+            if ab_len_sq == 0:
+                continue
+
+            t = (aex * abx + aey * aby) / ab_len_sq
+
+            t = max(0, min(1, t))
+
+            closest_x = ax + abx * t
+            closest_y = ay + aby * t
+
+            dx = ex - closest_x
+            dy = ey - closest_y
+
+            distance = math.sqrt(dx * dx + dy * dy)
+
+            if distance < 50:
+                return False
+
+        return True
+
+
+    def open_for_pass(self, ball, attack_goal, enemies):
+        """Игрок открывается под пас в сторону ворот соперника"""
+        if ball is None or attack_goal is None:
+            return
+        
+        direction = 1 if attack_goal.rect.centerx > ball.x else -1
+
+        target_x = ball.x + 160 * direction
+
+        if self.home_y < HEIGHT // 2:
+            target_y = ball.y - 90
+        else:
+            target_y = ball.y + 90
+
+        target_x = max(self.radius, min(WIDTH - self.radius, target_x))
+        target_y = max(self.radius, min(HEIGHT - self.radius, target_y))
+
+        self.move_towards(target_x, target_y, 0.9)
+
+    
+    def cover(self, ball):
+        """Защитник страхует команду во время атаки"""
+
+        if ball is None:
+            return
+
+        # Защитник не летит к мячу, а держит позицию между своей зоной и мячом
+        target_x = self.home_x * 0.7 + ball.x * 0.3
+        target_y = self.home_y * 0.7 + ball.y * 0.3
+
+        target_x = max(self.radius, min(WIDTH - self.radius, target_x))
+        target_y = max(self.radius, min(HEIGHT - self.radius, target_y))
+
+        self.move_towards(target_x, target_y, 0.6)
+
+
+    def move_to_support_position(self, ball):
+        """Игрок занимает позицию поддержки рядом с атакой"""
+
+        if ball is None:
+            return
+
+        # Если домашняя позиция слева, команда чаще атакует вправо.
+        # Если домашняя позиция справа, команда чаще атакует влево.
+        attack_direction = 1 if self.home_x < WIDTH // 2 else -1
+
+        # Поддержка располагается немного позади мяча
+        target_x = ball.x - 120 * attack_direction
+        target_y = self.home_y
+
+        target_x = max(self.radius, min(WIDTH - self.radius, target_x))
+        target_y = max(self.radius, min(HEIGHT - self.radius, target_y))
+
+        self.move_towards(target_x, target_y, 0.7)
+
+
+    def move_towards(self, target_x, target_y, speed_multiplier=1.0):
+        dx = target_x - self.x
+        dy = target_y - self.y
+        dist = math.hypot(dx, dy)
+
+        if dist == 0:
+            return
+
+        dx /= dist
+        dy /= dist
+
+        self.x += dx * self.speed * speed_multiplier
+        self.y += dy * self.speed * speed_multiplier
+
+
+    def is_closer_to_goal(self, teammate, goal):
+        my_dist = math.hypot(goal.rect.centerx - self.x, goal.rect.centery - self.y)
+        teammate_dist = math.hypot(goal.rect.centerx - teammate.x, goal.rect.centery - teammate.y)
+        
+        return teammate_dist < my_dist
+
+
 class Ball:
     def __init__(self, x, y):
         self.x = x
@@ -379,6 +540,9 @@ class Ball:
         self.vy = 0
         self.radius = BALL_RADIUS
         self.owner = None
+        self.last_owner = None
+        self.release_time = 0
+        self.release_cooldown = 250 # Небольшая задержка, чтобы игрок не забрал мяч обратно мгновенно
 
 
     def update(self):
@@ -480,7 +644,7 @@ def resolve_collision(player1, player2):
 
 
 def handle_ball_possession(player, ball):
-    """Обрабатывает владение мячом"""
+    """Обрабатывает захват мяча, дриблинг, потерю контроля и отбор"""
 
     dx = ball.x - player.x
     dy = ball.y - player.y
@@ -488,45 +652,62 @@ def handle_ball_possession(player, ball):
 
     control_distance = player.radius + ball.radius + 15
 
-    # игрок контролирует мяч
-    if distance < control_distance:
+    # Если этот игрок не является владельцем, сбрасываем его флаг владения.
+    # Это защищает от ситуации, когда has_ball остался True после отбора.
+    if ball.owner != player:
+        player.has_ball = False
 
-        # если мяч никем не занят - захват
-        if ball.owner is None:
+    # Если владелец ушёл слишком далеко от мяча — он теряет контроль.
+    # Это должно проверяться ДО условия distance < control_distance.
+    if ball.owner == player and distance > control_distance * 1.5:
+        ball.owner = None
+        player.has_ball = False
+        ball.last_owner = player
+        ball.release_time = pygame.time.get_ticks()
+        return
+
+    # Если игрок далеко от мяча, он ничего не делает.
+    if distance >= control_distance:
+        return
+    
+    # Небольшая защита от мгновенного возврата мяча после паса или удара.
+    if (
+        ball.owner is None
+        and ball.last_owner == player
+        and pygame.time.get_ticks() - ball.release_time < ball.release_cooldown
+    ):
+        return
+
+    # Если мяч свободен — игрок подбирает его.
+    if ball.owner is None:
+        ball.owner = player
+        player.has_ball = True
+    # Если мячом владеет другой игрок — пробуем отобрать.
+    elif ball.owner != player:
+        old_owner = ball.owner
+
+        steal_chance = max(0, 1 - distance / 80)
+
+        if steal_chance > 0.6:
+            old_owner.has_ball = False
             ball.owner = player
-
-        # если уже владеет этот игрок - дриблинг
-        if ball.owner == player:
-
             player.has_ball = True
+    
+    # Если после всех проверок этот игрок владеет мячом — выполняем дриблинг.
+    if ball.owner == player:
+        player.has_ball = True
 
-            # направление движения игрока (упрощённо)
-            if distance != 0:
-                dx /= distance
-                dy /= distance
+        if distance != 0:
+            dx /= distance
+            dy /= distance
 
-            # мяч держится ПЕРЕД игроком (важно для футбольного ощущения)
-            target_x = player.x + dx * (player.radius + 18)
-            target_y = player.y + dy * (player.radius + 18)
+        # Мяч держится немного впереди игрока.
+        target_x = player.x + dx * (player.radius + 18)
+        target_y = player.y + dy * (player.radius + 18)
 
-            # плавное следование мяча за игроком
-            ball.vx += (target_x - ball.x) * 0.25
-            ball.vy += (target_y - ball.y) * 0.25
-        
-        # если мячом владеет другой игрок - отбор
-        elif ball.owner != player:
-
-            # шанс отбора зависит от дистанции
-            steal_chance = max(0, 1 - (distance / 80))
-
-            if steal_chance > 0.6:  # порог для успешного отбора
-                ball.owner = player
-        
-        else:
-            # если ушёл далеко — потерял контроль
-            if ball.owner == player:
-                ball.owner = None
-                player.has_ball = False
+        # Плавное следование мяча за игроком.
+        ball.vx += (target_x - ball.x) * 0.25
+        ball.vy += (target_y - ball.y) * 0.25
 
 
 def to_grid(x, y):
@@ -610,19 +791,65 @@ def reset_positions(player, player2, enemy, enemy2, ball):
     ball.vy = 0
 
 
-def assign_team_tasks(team, ball, own_goal, enemy_goal):
+def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=None):
     """Назначает задачи игрокам команды в зависимости от ситуации на поле"""
-    closest_player = min(team, key=lambda p: math.sqrt((p.x - ball.x)**2 + (p.y - ball.y)**2))
+    
+    if controlled_players is None:
+        controlled_players = full_team
 
-    for player in team:
-        if player == closest_player:
-            player.task = 'PRESS'
-        elif player.role == 'ATTACKER':
+    if not controlled_players:
+        return
+    
+    # state = get_team_state(team, ball)
+
+    team_has_ball = ball.owner in full_team
+    enemy_has_ball = ball.owner is not None and ball.owner not in full_team
+
+    closest_player = min(controlled_players,
+                         key=lambda p: math.sqrt((p.x - ball.x) ** 2 + (p.y - ball.y) ** 2)
+                         )
+
+    for player in controlled_players:
+
+        # if player == closest_player:
+        #     player.task = 'PRESS'
+        #     continue
+
+        # Если этот AI владеет мячом
+        if ball.owner == player:
             player.task = 'ATTACK'
-        elif player.role == 'DEFENDER':
-            player.task = 'DEFEND'
-        else:
-            player.task = 'SUPPORT'
+        
+        elif team_has_ball:
+            if player.role in ('ATTACKER', 'MIDFIELDER'):
+                player.task = 'OPEN_FOR_PASS'
+            elif player.role == 'DEFENDER':
+                player.task = 'COVER'
+            else:
+                player.task = 'SUPPORT'
+        # Если мяч свободный
+        elif ball.owner is None:
+            if player == closest_player:
+                player.task = 'PRESS'
+            elif player.role == 'DEFENDER':
+                player.task = 'DEFEND'
+            else:
+                player.task = 'SUPPORT'
+        # Если противник владеет мячом
+        elif enemy_has_ball:
+            if player == closest_player:
+                player.task = 'PRESS'
+            elif player.role == 'DEFENDER':
+                player.task = 'DEFEND'
+            else:
+                player.task = 'SUPPORT'
+
+
+def get_team_state(team, ball):
+    """Определяет, находится ли команда в атаке или защите"""
+    if ball.owner in team:
+        return TEAM_ATTACK
+    
+    return TEAM_DEFEND
 
 
 def main():
@@ -842,10 +1069,20 @@ def main():
         ai_user_team = [p for p in user_team if p != active_player]
         
         # Назначаем задачи только тем союзникам, которые сейчас под управлением AI
-        assign_team_tasks(ai_user_team, ball, left_goal, right_goal)
+        assign_team_tasks(
+                user_team,
+                ball,
+                left_goal,
+                right_goal,
+                controlled_players=ai_user_team
+        )
 
         # Противники всегда под управлением AI, поэтому назначаем задачи всем
-        assign_team_tasks(enemy_team, ball, right_goal, left_goal)
+        assign_team_tasks(
+            enemy_team,
+            ball,
+            right_goal,
+            left_goal)
 
         ball.update()
 
@@ -854,10 +1091,10 @@ def main():
             if p == active_player:
                 p.move(keys)
             else:
-                p.update(ball=ball, target_goal=right_goal, teammates=user_team)
+                p.update(ball=ball, target_goal=right_goal, teammates=user_team, enemies=enemy_team)
         # Противники всегда под управлением AI, поэтому обновляем всех
         for e in enemy_team:
-            e.update(ball=ball, target_goal=left_goal, teammates=enemy_team)
+            e.update(ball=ball, target_goal=left_goal, teammates=enemy_team, enemies=user_team)
 
         # Столкновения между игроками
         all_players = user_team + enemy_team
