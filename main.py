@@ -801,16 +801,41 @@ def goal_check(ball, left_goal, right_goal):
     return None
 
 
-def reset_positions(player, player2, enemy, enemy2, ball):
-    player.x, player.y = WIDTH // 2 - 100, HEIGHT // 2 + 80
-    player2.x, player2.y = WIDTH // 2 - 100, HEIGHT // 2 - 80
+def reset_positions(user_team, enemy_team, ball):
+    """Сбрасывает позиции всех игроков и мяча после гола или рестарта"""
+    user_positions = [
+        (WIDTH // 2 - 100, HEIGHT // 2 + 80),
+        (WIDTH // 2 - 100, HEIGHT // 2 - 80),
+        (WIDTH // 2 - 200, HEIGHT // 2)
+    ]
 
-    enemy.x, enemy.y = WIDTH - 250, HEIGHT // 2 - 120
-    enemy2.x, enemy2.y = WIDTH - 350, HEIGHT // 2 + 120
+    enemy_positions = [
+        (WIDTH // 2 + 100, HEIGHT // 2 + 80),
+        (WIDTH // 2 + 100, HEIGHT // 2 - 80),
+        (WIDTH // 2 + 200, HEIGHT // 2)
+    ]
 
-    ball.x, ball.y = WIDTH//2, HEIGHT//2
+    # Сброс игроков команды пользователя
+    for player, pos in zip(user_team, user_positions):
+        player.x, player.y = pos
+        player.home_x, player.home_y = pos
+        player.has_ball = False
+        player.task = 'SUPPORT'
+
+    # Сброс игроков команды противника
+    for player, pos in zip(enemy_team, enemy_positions):
+        player.x, player.y = pos
+        player.home_x, player.home_y = pos
+        player.has_ball = False
+        player.task = 'SUPPORT'
+
+    # Сброс позиции мяча
+    ball.x, ball.y = WIDTH // 2, HEIGHT // 2
     ball.vx = 0
     ball.vy = 0
+    ball.owner = None
+    ball.last_owner = None
+    ball.release_time = 0
 
 
 def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=None):
@@ -832,10 +857,6 @@ def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=
                          )
 
     for player in controlled_players:
-
-        # if player == closest_player:
-        #     player.task = 'PRESS'
-        #     continue
 
         # Если этот AI владеет мячом
         if ball.owner == player:
@@ -951,8 +972,8 @@ def main():
 
 
 
-    # Домашние позиции для AI
-    for p in user_team[1:]:
+    # Домашние позиции для игроков
+    for p in user_team:
         p.home_x, p.home_y = p.x, p.y
     for p in enemy_team:
         p.home_x, p.home_y = p.x, p.y
@@ -1031,6 +1052,45 @@ def main():
             pygame.display.flip()
             continue
         
+        if game_state == GOAL_RESET:
+            draw_field()
+
+            left_goal.draw(screen)
+            right_goal.draw(screen)
+            ball.draw(screen)
+
+            for p in user_team:
+                p.draw(screen)
+            for p in enemy_team:
+                p.draw(screen)
+
+             # Выделение активного игрока
+            pygame.draw.circle(
+                screen,
+                (255, 255, 0),
+                (int(active_player.x), int(active_player.y)),
+                active_player.radius + 3,
+                2
+            )
+
+            # Счёт
+            score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
+            score_rect = score_text.get_rect(center=(WIDTH // 2, 40))
+            screen.blit(score_text, score_rect)
+
+            # Надпись после гола
+            goal_text = font.render("Гол!", True, WHITE)
+            goal_rect = goal_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            screen.blit(goal_text, goal_rect)
+
+            pygame.display.flip()
+
+            # Через 1.5 секунды игра продолжается
+            if pygame.time.get_ticks() - reset_timer > 1500:
+                game_state = PLAYING
+
+            continue
+
         if game_state == GAME_OVER:
             screen.blit(menu_image, (0, 0))
 
@@ -1067,7 +1127,7 @@ def main():
                         # сброс игры
                         left_score = 0
                         right_score = 0
-                        reset_positions(player, player2, enemy, enemy2, ball)
+                        reset_positions(user_team, enemy_team, ball)
                         start_ticks = pygame.time.get_ticks()
                         game_state = PLAYING
 
@@ -1130,12 +1190,12 @@ def main():
 
         if goal == 'LEFT':
             left_score += 1
-            reset_positions(player, player2, enemy, enemy2, ball)
+            reset_positions(user_team, enemy_team, ball)
             game_state = GOAL_RESET
             reset_timer = pygame.time.get_ticks()
         if goal == 'RIGHT':
             right_score += 1
-            reset_positions(player, player2, enemy, enemy2, ball)
+            reset_positions(user_team, enemy_team, ball)
             game_state = GOAL_RESET
             reset_timer = pygame.time.get_ticks()
 
