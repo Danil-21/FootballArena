@@ -129,6 +129,14 @@ class Player:
             ball.vx = dx * kick_force
             ball.vy = dy * kick_force
 
+        # После удара мяч больше не находится под контролем игрока
+        if ball.owner == self:
+            ball.owner = None
+
+        self.has_ball = False
+        ball.last_owner = self
+        ball.release_time = pygame.time.get_ticks()
+
 
     def draw(self, screen):
         pygame.draw.circle(
@@ -238,15 +246,11 @@ class AIPlayer(Player):
         # Если близко к воротам - бить
         if distance_to_goal < 320:
             self.kick_towards_goal(ball, target_goal)
-            ball.owner = None
-            self.has_ball = False
             return
         
         # Если есть хороший пас - пасовать
         if teammate is not None and self.is_closer_to_goal(teammate, target_goal):
             self.pass_ball(ball, teammate)
-            ball.owner = None
-            self.has_ball = False
             return
         
         # Иначе - двигаться к воротам
@@ -271,7 +275,8 @@ class AIPlayer(Player):
         
 
     def kick_towards_goal(self, ball, goal):
-
+        """AI бьёт мяч в сторону ворот"""
+        
         # центр ворот
         target_x = goal.rect.centerx
         target_y = goal.rect.centery
@@ -292,6 +297,14 @@ class AIPlayer(Player):
 
         ball.vx = dx * kick_force
         ball.vy = dy * kick_force
+
+        # После удара AI отпускает мяч
+        if ball.owner == self:
+            ball.owner = None
+
+        self.has_ball = False
+        ball.last_owner = self
+        ball.release_time = pygame.time.get_ticks()
 
         
     def find_best_teammate(self, teammates, ball, enemies, target_goal):
@@ -317,6 +330,7 @@ class AIPlayer(Player):
     
 
     def pass_ball(self, ball, teammate):
+        """AI отдаёт пас партнёру"""
 
         dx = teammate.x - ball.x
         dy = teammate.y - ball.y
@@ -333,6 +347,14 @@ class AIPlayer(Player):
 
         ball.vx = dx * pass_force
         ball.vy = dy * pass_force
+
+        # После паса мяч становится свободным
+        if ball.owner == self:
+            ball.owner = None
+
+        self.has_ball = False
+        ball.last_owner = self
+        ball.release_time = pygame.time.get_ticks()
 
 
     def is_closest_to_ball(self, teammates, ball):
