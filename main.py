@@ -1,5 +1,3 @@
-from turtle import title
-
 import pygame
 import sys
 import math
@@ -117,17 +115,20 @@ class Player:
         if distance == 0:
             return
         
-        # Удар только если мяч рядом
-        if distance < self.radius + ball.radius + 10:
+        control_distance = self.radius + ball.radius + 15
 
-            # Нормализуем вектор удара
-            dx /= distance
-            dy /= distance
+        # Удар разрешён только если игрок рядом с мячом или владеет им
+        if distance > control_distance and ball.owner != self:
+            return
 
-            kick_force = KICK_FORCE
+        # Нормализуем вектор удара
+        dx /= distance
+        dy /= distance
 
-            ball.vx = dx * kick_force
-            ball.vy = dy * kick_force
+        kick_force = KICK_FORCE
+
+        ball.vx = dx * kick_force
+        ball.vy = dy * kick_force
 
         # После удара мяч больше не находится под контролем игрока
         if ball.owner == self:
@@ -804,15 +805,19 @@ def goal_check(ball, left_goal, right_goal):
 def reset_positions(user_team, enemy_team, ball):
     """Сбрасывает позиции всех игроков и мяча после гола или рестарта"""
     user_positions = [
-        (WIDTH // 2 - 100, HEIGHT // 2 + 80),
-        (WIDTH // 2 - 100, HEIGHT // 2 - 80),
-        (WIDTH // 2 - 200, HEIGHT // 2)
+        (WIDTH // 2 - 120, HEIGHT // 2),
+        (WIDTH // 2 - 80, HEIGHT // 2 - 150),
+        (WIDTH // 2 - 260, HEIGHT // 2 - 90),
+        (WIDTH // 2 - 80, HEIGHT // 2 + 150),
+        (WIDTH // 2 - 260, HEIGHT // 2 + 90),
     ]
 
     enemy_positions = [
-        (WIDTH // 2 + 100, HEIGHT // 2 + 80),
-        (WIDTH // 2 + 100, HEIGHT // 2 - 80),
-        (WIDTH // 2 + 200, HEIGHT // 2)
+        (WIDTH // 2 + 80, HEIGHT // 2 - 150),
+        (WIDTH // 2 + 120, HEIGHT // 2),
+        (WIDTH // 2 + 260, HEIGHT // 2 - 90),
+        (WIDTH // 2 + 80, HEIGHT // 2 + 150),
+        (WIDTH // 2 + 260, HEIGHT // 2 + 90),
     ]
 
     # Сброс игроков команды пользователя
@@ -976,25 +981,29 @@ def main():
     right_score = 0
 
     # Команда пользователя
-    player = AIPlayer(WIDTH // 2 - 100, HEIGHT // 2 + 80, BLUE, 'MIDFIELDER')
-    player2 = AIPlayer(WIDTH // 2 - 100, HEIGHT // 2 - 80, BLUE, 'ATTACKER')
-    player3 = AIPlayer(WIDTH // 2 - 200, HEIGHT // 2, BLUE, 'DEFENDER')
+    player = AIPlayer(WIDTH // 2 - 120, HEIGHT // 2, BLUE, 'MIDFIELDER')
+    player2 = AIPlayer(WIDTH // 2 - 80, HEIGHT // 2 - 150, BLUE, 'ATTACKER')
+    player3 = AIPlayer(WIDTH // 2 - 260, HEIGHT // 2 - 90, BLUE, 'DEFENDER')
+    player4 = AIPlayer(WIDTH // 2 - 80, HEIGHT // 2 + 150, BLUE, 'ATTACKER')
+    player5 = AIPlayer(WIDTH // 2 - 260, HEIGHT // 2 + 90, BLUE, 'DEFENDER')
 
     # зоны USER TEAM
-    player2.zone_x_min = 0
-    player2.zone_x_max = WIDTH * 0.6
-    player2.zone_y_min = 0
-    player2.zone_y_max = HEIGHT
+    # player2.zone_x_min = 0
+    # player2.zone_x_max = WIDTH * 0.6
+    # player2.zone_y_min = 0
+    # player2.zone_y_max = HEIGHT
 
-    player3.zone_x_min = 0
-    player3.zone_x_max = WIDTH * 0.6
-    player3.zone_y_min = 0
-    player3.zone_y_max = HEIGHT
+    # player3.zone_x_min = 0
+    # player3.zone_x_max = WIDTH * 0.6
+    # player3.zone_y_min = 0
+    # player3.zone_y_max = HEIGHT
     
     # Команда противника
-    enemy = AIPlayer(WIDTH - 250, HEIGHT // 2 - 120, RED, 'ATTACKER')
-    enemy2 = AIPlayer(WIDTH - 350, HEIGHT // 2 + 120, RED, 'MIDFIELDER')
-    enemy3 = AIPlayer(WIDTH - 250, HEIGHT // 2, RED, 'DEFENDER')
+    enemy = AIPlayer(WIDTH // 2 + 80, HEIGHT // 2 - 150, RED, 'ATTACKER')
+    enemy2 = AIPlayer(WIDTH // 2 + 120, HEIGHT // 2, RED, 'MIDFIELDER')
+    enemy3 = AIPlayer(WIDTH // 2 + 260, HEIGHT // 2 - 90, RED, 'DEFENDER')
+    enemy4 = AIPlayer(WIDTH // 2 + 80, HEIGHT // 2 + 150, RED, 'ATTACKER')
+    enemy5 = AIPlayer(WIDTH // 2 + 260, HEIGHT // 2 + 90, RED, 'DEFENDER')
 
     enemy.zone_x_min = WIDTH * 0.4
     enemy.zone_x_max = WIDTH
@@ -1011,10 +1020,22 @@ def main():
     enemy3.zone_y_min = 0
     enemy3.zone_y_max = HEIGHT
 
-    user_team = [player, player2, player3]
-    enemy_team = [enemy, enemy2, enemy3]
+    user_team = [player, player2, player3, player4, player5]
+    enemy_team = [enemy, enemy2, enemy3, enemy4, enemy5]
 
+    # Зоны команды пользователя
+    for p in user_team:
+        p.zone_x_min = 0
+        p.zone_x_max = WIDTH * 0.6
+        p.zone_y_min = 0
+        p.zone_y_max = HEIGHT
 
+    # Зоны команды противника
+    for p in enemy_team:
+        p.zone_x_min = WIDTH * 0.4
+        p.zone_x_max = WIDTH
+        p.zone_y_min = 0
+        p.zone_y_max = HEIGHT
 
     # Домашние позиции для игроков
     for p in user_team:
