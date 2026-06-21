@@ -38,6 +38,7 @@ GREEN = (30, 160, 60)
 WHITE = (255, 255, 255)
 BLUE = (50, 80, 255)
 RED = (255, 50, 50)
+YELLOW = (255, 255, 0)
 
 PLAYER_RADIUS = 20
 PLAYER_SPEED = config["player_speed"]
@@ -50,6 +51,37 @@ GOAL_WIDTH = 20
 GOAL_HEIGHT = 200
 
 GRID_SIZE = 40
+SHOW_GRID = False
+GRID_COLOR = (40, 120, 60)
+
+AI_SPEED_PENALTY = 2
+
+AI_KICK_FORCE = 8
+PASS_FORCE = 7
+
+CONTROL_DISTANCE_OFFSET = 15
+MANUAL_CONTROL_DISTANCE_OFFSET = 20
+
+LOSE_CONTROL_MULTIPLIER = 1.5
+
+STEAL_DISTANCE = 80
+STEAL_THRESHOLD = 0.6
+
+RELEASE_COOLDOWN = 250
+
+PASS_BLOCK_DISTANCE = 50
+
+GOAL_RESET_COOLDOWN = 1500
+
+AI_SHOOT_DISTANCE = 320
+
+OPEN_PASS_DISTANCE = 160
+OPEN_PASS_Y_OFFSET = 90
+
+SUPPORT_DISTANCE_BEHIND_BALL = 120
+
+DEFENDER_COVER_HOME_WEIGHT = 0.7
+DEFENDER_COVER_BALL_WEIGHT = 0.3
 
 CHASE_BALL = 'CHASE_BALL'
 ATTACK = 'ATTACK'
@@ -57,8 +89,6 @@ RETURN_HOME = 'RETURN_HOME'
 
 TEAM_ATTACK = 'TEAM_ATTACK'
 TEAM_DEFEND = 'TEAM_DEFEND'
-
-DIFFICULTY = "NORMAL"
 
 pygame.init()
 
@@ -101,16 +131,14 @@ class Player:
         if keys[pygame.K_s]:
             self.y += self.speed
 
-        # Ограничение выхода за границы поля
-        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
-        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
+        self.limit_to_field()
 
     
     def kick_ball(self, ball):
         dx = ball.x - self.x
         dy = ball.y - self.y
 
-        distance = math.sqrt(dx ** 2 + dy ** 2)
+        distance = self.distance_to(ball)
 
         if distance == 0:
             return
@@ -152,13 +180,25 @@ class Player:
         if keys is not None:
             self.move(keys)
 
+    
+    def distance_to(self, obj):
+        """Возвращает расстояние от игрока до другого объекта"""
+
+        return math.hypot(self.x - obj.x, self.y - obj.y)
+
+
+    def limit_to_field(self):
+        """Не даёт игроку выйти за границы поля"""
+
+        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
+        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
 
 class AIPlayer(Player):
     
     def __init__(self, x, y, color, role):
         super().__init__(x, y, color)
 
-        self.speed = PLAYER_SPEED - 2
+        self.speed = PLAYER_SPEED - AI_SPEED_PENALTY # ИИ медленнее
         self.state = CHASE_BALL
         self.role = role
         self.task = 'SUPPORT'   # <-- ДОБАВИТЬ ЭТО (защита от ошибки)
@@ -197,9 +237,7 @@ class AIPlayer(Player):
         elif self.task == 'COVER':
             self.cover(ball)
 
-        # Ограничение выхода за границы поля
-        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
-        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
+        self.limit_to_field()
 
 
     def chase_ball(self, ball):
@@ -245,7 +283,7 @@ class AIPlayer(Player):
         teammate = self.find_best_teammate(teammates, ball, enemies, target_goal)
 
         # Если близко к воротам - бить
-        if distance_to_goal < 320:
+        if distance_to_goal < AI_SHOOT_DISTANCE:
             self.kick_towards_goal(ball, target_goal)
             return
         
@@ -294,7 +332,7 @@ class AIPlayer(Player):
         dx /= distance
         dy /= distance
 
-        kick_force = 8
+        kick_force = AI_KICK_FORCE
 
         ball.vx = dx * kick_force
         ball.vy = dy * kick_force
@@ -344,7 +382,7 @@ class AIPlayer(Player):
         dx /= distance
         dy /= distance
 
-        pass_force = 7
+        pass_force = PASS_FORCE
 
         ball.vx = dx * pass_force
         ball.vy = dy * pass_force
@@ -471,7 +509,7 @@ class AIPlayer(Player):
 
             distance = math.sqrt(dx * dx + dy * dy)
 
-            if distance < 50:
+            if distance < PASS_BLOCK_DISTANCE:
                 return False
 
         return True
@@ -484,12 +522,12 @@ class AIPlayer(Player):
         
         direction = 1 if attack_goal.rect.centerx > ball.x else -1
 
-        target_x = ball.x + 160 * direction
+        target_x = ball.x + OPEN_PASS_DISTANCE * direction
 
         if self.home_y < HEIGHT // 2:
-            target_y = ball.y - 90
+            target_y = ball.y - OPEN_PASS_Y_OFFSET
         else:
-            target_y = ball.y + 90
+            target_y = ball.y + OPEN_PASS_Y_OFFSET
 
         target_x = max(self.radius, min(WIDTH - self.radius, target_x))
         target_y = max(self.radius, min(HEIGHT - self.radius, target_y))
@@ -504,8 +542,8 @@ class AIPlayer(Player):
             return
 
         # Защитник не летит к мячу, а держит позицию между своей зоной и мячом
-        target_x = self.home_x * 0.7 + ball.x * 0.3
-        target_y = self.home_y * 0.7 + ball.y * 0.3
+        target_x = self.home_x * DEFENDER_COVER_HOME_WEIGHT + ball.x * DEFENDER_COVER_BALL_WEIGHT
+        target_y = self.home_y * DEFENDER_COVER_HOME_WEIGHT + ball.y * DEFENDER_COVER_BALL_WEIGHT
 
         target_x = max(self.radius, min(WIDTH - self.radius, target_x))
         target_y = max(self.radius, min(HEIGHT - self.radius, target_y))
@@ -524,7 +562,7 @@ class AIPlayer(Player):
         attack_direction = 1 if self.home_x < WIDTH // 2 else -1
 
         # Поддержка располагается немного позади мяча
-        target_x = ball.x - 120 * attack_direction
+        target_x = ball.x - SUPPORT_DISTANCE_BEHIND_BALL * attack_direction
         target_y = self.home_y
 
         target_x = max(self.radius, min(WIDTH - self.radius, target_x))
@@ -565,7 +603,7 @@ class Ball:
         self.owner = None
         self.last_owner = None
         self.release_time = 0
-        self.release_cooldown = 250 # Небольшая задержка, чтобы игрок не забрал мяч обратно мгновенно
+        self.release_cooldown = RELEASE_COOLDOWN # Небольшая задержка, чтобы игрок не забрал мяч обратно мгновенно
 
 
     def update(self):
@@ -673,7 +711,7 @@ def handle_ball_possession(player, ball):
     dy = ball.y - player.y
     distance = math.sqrt(dx ** 2 + dy ** 2)
 
-    control_distance = player.radius + ball.radius + 15
+    control_distance = player.radius + ball.radius + CONTROL_DISTANCE_OFFSET
 
     # Если этот игрок не является владельцем, сбрасываем его флаг владения.
     # Это защищает от ситуации, когда has_ball остался True после отбора.
@@ -682,7 +720,7 @@ def handle_ball_possession(player, ball):
 
     # Если владелец ушёл слишком далеко от мяча — он теряет контроль.
     # Это должно проверяться ДО условия distance < control_distance.
-    if ball.owner == player and distance > control_distance * 1.5:
+    if ball.owner == player and distance > control_distance * LOSE_CONTROL_MULTIPLIER:
         ball.owner = None
         player.has_ball = False
         ball.last_owner = player
@@ -709,9 +747,9 @@ def handle_ball_possession(player, ball):
     elif ball.owner != player:
         old_owner = ball.owner
 
-        steal_chance = max(0, 1 - distance / 80)
+        steal_chance = max(0, 1 - distance / STEAL_DISTANCE)
 
-        if steal_chance > 0.6:
+        if steal_chance > STEAL_THRESHOLD:
             old_owner.has_ball = False
             ball.owner = player
             player.has_ball = True
@@ -937,6 +975,83 @@ def draw_timer(seconds):
     screen.blit(time_text, time_rect)
 
 
+def draw_score(left_score, right_score):
+    """Отрисовывает счёт матча"""
+
+    score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
+    score_rect = score_text.get_rect(center=(WIDTH // 2, 40))
+
+    screen.blit(score_text, score_rect)
+
+
+def draw_center_text(text):
+    """Отрисовывает текст по центру экрана"""
+
+    rendered_text = font.render(text, True, WHITE)
+    text_rect = rendered_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+
+    screen.blit(rendered_text, text_rect)
+
+
+def draw_active_player_marker(active_player):
+    """Отрисовывает обводку вокруг активного игрока"""
+
+    pygame.draw.circle(
+        screen,
+        YELLOW,
+        (int(active_player.x), int(active_player.y)),
+        active_player.radius + 3,
+        2
+    )
+
+
+def draw_game_scene(user_team, enemy_team, ball, left_goal, right_goal, active_player):
+    """Отрисовывает основную игровую сцену"""
+
+    draw_field()
+    draw_grid()
+
+    left_goal.draw(screen)
+    right_goal.draw(screen)
+
+    ball.draw(screen)
+
+    draw_players(user_team, enemy_team)
+
+    # draw_ball_owner_marker(ball)
+    draw_active_player_marker(active_player)
+
+
+def draw_players(user_team, enemy_team):
+    """Отрисовывает всех игроков обеих команд"""
+
+    for player in user_team + enemy_team:
+        player.draw(screen)
+
+
+def draw_grid():
+    """Отрисовывает сетку для визуализации поля поиска пути"""
+
+    if not SHOW_GRID:
+        return
+
+    for x in range(0, WIDTH, GRID_SIZE):
+        pygame.draw.line(
+            screen,
+            GRID_COLOR,
+            (x, 0),
+            (x, HEIGHT)
+        )
+
+    for y in range(0, HEIGHT, GRID_SIZE):
+        pygame.draw.line(
+            screen,
+            GRID_COLOR,
+            (0, y),
+            (WIDTH, y)
+        )
+
+
 def main():
     running = True
 
@@ -1134,34 +1249,16 @@ def main():
                             p.task = None
         
         if game_state == PAUSED:
-            # screen.blit(font.render("PAUSED", True, WHITE), (WIDTH//2 - 80, HEIGHT//2))
-            # pygame.display.flip()
-
-            draw_field()
-
-            left_goal.draw(screen)
-            right_goal.draw(screen)
-
-            ball.draw(screen)
-
-            for p in user_team + enemy_team:
-                p.draw(screen)
-
-            pygame.draw.circle(
-                screen,
-                (255, 255, 0),
-                (int(active_player.x), int(active_player.y)),
-                active_player.radius + 3,
-                2
+            draw_game_scene(
+                user_team,
+                enemy_team,
+                ball,
+                left_goal,
+                right_goal,
+                active_player
             )
 
-            score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
-            score_rect = score_text.get_rect(center=(WIDTH // 2, 40))
-            screen.blit(score_text, score_rect)
-
-            pause_text = font.render("PAUSED", True, WHITE)
-            pause_rect = pause_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-            screen.blit(pause_text, pause_rect)
+            draw_score(left_score, right_score)
 
             remaining_seconds = get_remaining_seconds(
                 start_ticks,
@@ -1170,45 +1267,37 @@ def main():
             )
 
             draw_timer(remaining_seconds)
+            draw_center_text("PAUSED")
 
             pygame.display.flip()
+
             continue
         
         if game_state == GOAL_RESET:
-            draw_field()
+            draw_game_scene(
+                    user_team,
+                    enemy_team,
+                    ball,
+                    left_goal,
+                    right_goal,
+                    active_player
+                )
 
-            left_goal.draw(screen)
-            right_goal.draw(screen)
-            ball.draw(screen)
+            draw_score(left_score, right_score)
 
-            for p in user_team:
-                p.draw(screen)
-            for p in enemy_team:
-                p.draw(screen)
-
-             # Выделение активного игрока
-            pygame.draw.circle(
-                screen,
-                (255, 255, 0),
-                (int(active_player.x), int(active_player.y)),
-                active_player.radius + 3,
-                2
+            remaining_seconds = get_remaining_seconds(
+                start_ticks,
+                total_paused_time,
+                pause_started
             )
 
-            # Счёт
-            score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
-            score_rect = score_text.get_rect(center=(WIDTH // 2, 40))
-            screen.blit(score_text, score_rect)
-
-            # Надпись после гола
-            goal_text = font.render("Гол!", True, WHITE)
-            goal_rect = goal_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-            screen.blit(goal_text, goal_rect)
+            draw_timer(remaining_seconds)
+            draw_center_text("Гол!")
 
             pygame.display.flip()
 
             # Через 1.5 секунды игра продолжается
-            if pygame.time.get_ticks() - reset_timer > 1500:
+            if pygame.time.get_ticks() - reset_timer > GOAL_RESET_COOLDOWN:
                 total_paused_time += pygame.time.get_ticks() - pause_started
                 pause_started = 0
                 game_state = PLAYING
@@ -1338,41 +1427,17 @@ def main():
             pause_started = reset_timer
 
         # Отрисовка
-        draw_field()
-        # сетка
-        for x in range(0, WIDTH, GRID_SIZE):
-            pygame.draw.line(
-                screen,
-                (40, 120, 60),
-                (x, 0),
-                (x, HEIGHT)
-            )
-        for y in range(0, HEIGHT, GRID_SIZE):
-            pygame.draw.line(
-                screen,
-                (40, 120, 60),
-                (0, y),
-                (WIDTH, y)
-            )
+        draw_game_scene(
+            user_team,
+            enemy_team,
+            ball,
+            left_goal,
+            right_goal,
+            active_player
+        )
 
-        # Ворота
-        left_goal.draw(screen)
-        right_goal.draw(screen)
-        
-        # Объекты
-        ball.draw(screen)
-        for p in all_players:
-            p.draw(screen)
-        
-        # Отрисовка выделения активного игрока
-        pygame.draw.circle(screen, (255, 255, 0), (int(active_player.x), int(active_player.y)), active_player.radius+3, 2)
+        draw_score(left_score, right_score)
 
-        # Счет
-        score_text = font.render(f"{left_score} : {right_score}", True, WHITE)
-        score_rect = score_text.get_rect(center=(WIDTH // 2, 40))
-        screen.blit(score_text, score_rect)
-
-         # Таймер
         remaining_seconds = get_remaining_seconds(
             start_ticks,
             total_paused_time,
