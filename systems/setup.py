@@ -43,11 +43,11 @@ def create_goals():
 def create_user_team():
     """Создаёт команду пользователя"""
 
-    player1 = AIPlayer(WIDTH // 2 - 120, HEIGHT // 2, BLUE, "MIDFIELDER")
-    player2 = AIPlayer(WIDTH // 2 - 80, HEIGHT // 2 - 150, BLUE, "ATTACKER")
-    player3 = AIPlayer(WIDTH // 2 - 260, HEIGHT // 2 - 90, BLUE, "DEFENDER")
-    player4 = AIPlayer(WIDTH // 2 - 80, HEIGHT // 2 + 150, BLUE, "ATTACKER")
-    player5 = AIPlayer(WIDTH // 2 - 260, HEIGHT // 2 + 90, BLUE, "DEFENDER")
+    player1 = AIPlayer(WIDTH // 2 - 120, HEIGHT // 2, BLUE, "MIDFIELDER", 1)
+    player2 = AIPlayer(WIDTH // 2 - 80, HEIGHT // 2 - 150, BLUE, "ATTACKER", 2)
+    player3 = AIPlayer(WIDTH // 2 - 260, HEIGHT // 2 - 90, BLUE, "DEFENDER", 3)
+    player4 = AIPlayer(WIDTH // 2 - 80, HEIGHT // 2 + 150, BLUE, "ATTACKER", 4)
+    player5 = AIPlayer(WIDTH // 2 - 260, HEIGHT // 2 + 90, BLUE, "DEFENDER", 5)
 
     return [player1, player2, player3, player4, player5]
 
@@ -55,11 +55,11 @@ def create_user_team():
 def create_enemy_team():
     """Создаёт команду противника"""
 
-    enemy1 = AIPlayer(WIDTH // 2 + 80, HEIGHT // 2 - 150, RED, "ATTACKER")
-    enemy2 = AIPlayer(WIDTH // 2 + 120, HEIGHT // 2, RED, "MIDFIELDER")
-    enemy3 = AIPlayer(WIDTH // 2 + 260, HEIGHT // 2 - 90, RED, "DEFENDER")
-    enemy4 = AIPlayer(WIDTH // 2 + 80, HEIGHT // 2 + 150, RED, "ATTACKER")
-    enemy5 = AIPlayer(WIDTH // 2 + 260, HEIGHT // 2 + 90, RED, "DEFENDER")
+    enemy1 = AIPlayer(WIDTH // 2 + 80, HEIGHT // 2 - 150, RED, "ATTACKER", 1)
+    enemy2 = AIPlayer(WIDTH // 2 + 120, HEIGHT // 2, RED, "MIDFIELDER", 2)
+    enemy3 = AIPlayer(WIDTH // 2 + 260, HEIGHT // 2 - 90, RED, "DEFENDER", 3)
+    enemy4 = AIPlayer(WIDTH // 2 + 80, HEIGHT // 2 + 150, RED, "ATTACKER", 4)
+    enemy5 = AIPlayer(WIDTH // 2 + 260, HEIGHT // 2 + 90, RED, "DEFENDER", 5)
 
     return [enemy1, enemy2, enemy3, enemy4, enemy5]
 

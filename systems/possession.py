@@ -9,7 +9,14 @@ from config import (
 
 
 def handle_ball_possession(player, ball, current_time):
-    """Обрабатывает захват мяча, дриблинг, потерю контроля и отбор"""
+    """
+    Обрабатывает захват мяча, дриблинг, потерю контроля и отбор
+    
+    Args:
+        player (Player): Игрок
+        ball (Ball): Объект мяча
+        current_time (int): Текущее игровое время
+    """
 
     dx = ball.x - player.x
     dy = ball.y - player.y
@@ -18,8 +25,6 @@ def handle_ball_possession(player, ball, current_time):
 
     control_distance = player.radius + ball.radius + CONTROL_DISTANCE_OFFSET
 
-    # Если владелец ушёл слишком далеко от мяча - он теряет контроль.
-    # Это должно проверяться ДО условия distance < control_distance.
     if ball.owner == player and distance > control_distance * LOSE_CONTROL_MULTIPLIER:
         ball.owner = None
         player.has_ball = False
@@ -28,7 +33,6 @@ def handle_ball_possession(player, ball, current_time):
         
         return
 
-    # Если игрок далеко от мяча, он ничего не делает.
     if distance >= control_distance:
         return
     

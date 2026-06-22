@@ -3,20 +3,26 @@ import math
 from config import (
     WIDTH,
     HEIGHT,
-    GAME_TIME,
-    PASS_FORCE,
-    MANUAL_CONTROL_DISTANCE_OFFSET
+    GAME_TIME
 )
 
 
 def goal_check(ball, left_goal, right_goal):
-    """Проверяет, забит ли гол"""
+    """
+    Проверяет, забит ли гол в одни из ворот
 
-    # Проверяем левые ворота
+    Args:
+        ball (Ball): Объект мяча
+        left_goal (Goal): Левые ворота
+        right_goal (Goal): Правые ворота
+    
+    Returns:
+        str: 'LEFT' или 'RIGHT' в зависимости от забитого гола, либо None
+    """
+
     if left_goal.rect.collidepoint(ball.x, ball.y):
         return 'RIGHT'
-    
-    # Проверяем правые ворота
+
     if right_goal.rect.collidepoint(ball.x, ball.y):
         return 'LEFT'
     
@@ -24,7 +30,14 @@ def goal_check(ball, left_goal, right_goal):
 
 
 def reset_positions(user_team, enemy_team, ball):
-    """Сбрасывает позиции всех игроков и мяча после гола или рестарта"""
+    """
+    Сбрасывает позиции всех игроков и мяча после гола или рестарта
+    
+    Args:
+        user_team (list): Команда пользователя
+        enemy_team (list): Команда противника
+        ball (Ball): Объект мяча
+    """
 
     user_positions = [
         (WIDTH // 2 - 120, HEIGHT // 2),
@@ -42,21 +55,18 @@ def reset_positions(user_team, enemy_team, ball):
         (WIDTH // 2 + 260, HEIGHT // 2 + 90),
     ]
 
-    # Сброс игроков команды пользователя
     for player, pos in zip(user_team, user_positions):
         player.x, player.y = pos
         player.home_x, player.home_y = pos
         player.has_ball = False
         player.task = 'SUPPORT'
 
-    # Сброс игроков команды противника
     for player, pos in zip(enemy_team, enemy_positions):
         player.x, player.y = pos
         player.home_x, player.home_y = pos
         player.has_ball = False
         player.task = 'SUPPORT'
 
-    # Сброс позиции мяча
     ball.x, ball.y = WIDTH // 2, HEIGHT // 2
     ball.vx = 0
     ball.vy = 0
@@ -66,7 +76,16 @@ def reset_positions(user_team, enemy_team, ball):
 
 
 def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=None):
-    """Назначает задачи игрокам команды в зависимости от ситуации на поле"""
+    """
+    Назначает задачи игрокам команды в зависимости от ситуации на поле
+    
+    Args:
+        full_team (list): Все игроки команды
+        ball (Ball): Объект мяча
+        own_goal (Goal): Свои ворота
+        enemy_goal (Goal): Ворота соперника
+        controlled_players (list): Игроки, которым назначаются задачи
+    """
     
     if controlled_players is None:
         controlled_players = full_team
@@ -113,13 +132,22 @@ def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=
 
 
 def get_remaining_seconds(start_ticks, total_paused_time, pause_started, current_time):
-    """Возвращает оставшееся время матча в секундах"""
+    """
+    Возвращает оставшееся время матча в секундах
+    
+    Args:
+        start_ticks (int): Время начала матча
+        total_paused_time (int): Общее время всех пауз
+        pause_started (int): Время начала текущей паузы
+        current_time (int): Текущее время игры
+    
+    Returns:
+        int: Оставшееся время в секундах
+    """
 
     if start_ticks == 0:
         return GAME_TIME
 
-    # Если сейчас игра стоит на паузе или после гола,
-    # то текущая пауза тоже не должна входить в игровое время.
     current_pause_time = 0
 
     if pause_started != 0:
@@ -129,3 +157,27 @@ def get_remaining_seconds(start_ticks, total_paused_time, pause_started, current
     remaining_seconds = GAME_TIME - elapsed_ms // 1000
 
     return max(0, remaining_seconds)
+
+
+def find_closest_player_to_ball(players, ball):
+    """
+    Находит игрока, который находится ближе всего к мячу
+    
+    Args:
+        players (list): Список игроков
+        ball (Ball): Объект мяча
+    
+    Returns:
+        Player: Ближайший игрок или None, если список пуст
+    """
+
+    if not players:
+        return None
+
+    return min(
+        players,
+        key=lambda player: math.hypot(
+            player.x - ball.x,
+            player.y - ball.y
+        )
+    )

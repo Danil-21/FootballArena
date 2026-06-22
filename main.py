@@ -10,7 +10,8 @@ from systems.game_logic import (
     goal_check,
     reset_positions,
     assign_team_tasks,
-    get_remaining_seconds
+    get_remaining_seconds,
+    find_closest_player_to_ball
 )
 
 from ui.renderer import (
@@ -23,8 +24,10 @@ from ui.renderer import (
 from ui.screens import (
     draw_menu_screen,
     draw_game_over_screen,
+    draw_pause_screen,
     create_menu_buttons,
-    create_game_over_buttons
+    create_game_over_buttons,
+    create_pause_buttons
 )
 
 
@@ -43,7 +46,15 @@ font = pygame.font.SysFont('Arial', 40)
 
 
 def get_player_movement(keys):
-    """Возвращает направление движения игрока по клавишам"""
+    """
+    Возвращает направление движения игрока по клавишам
+    
+    Args:
+    keys (pygame.key): состояние клавиш клавиатуры
+
+    Returns:
+        tuple: направление движения (x, y)
+    """
 
     move_x = 0
     move_y = 0
@@ -64,10 +75,22 @@ def get_player_movement(keys):
 
 
 def main():
+    """
+    Основной игровой цикл.
+
+    Управляет:
+    - состояниями игры (MENU, PLAYING, PAUSED, GAME_OVER)
+    - обработкой событий
+    - обновлением AI и физики
+    - проверкой голов и таймера
+    - отрисовкой сцены
+    """
+
     running = True
 
     start_button, quit_button = create_menu_buttons()
     restart_button, quit_gameover_button = create_game_over_buttons()
+    pause_resume_button, pause_restart_button, pause_quit_button = create_pause_buttons()
 
     game_state = MENU
     reset_timer = 0
@@ -107,8 +130,6 @@ def main():
     for p in enemy_team:
         p.home_x, p.home_y = p.x, p.y
 
-    # active_player = player
-
     while running:
         clock.tick(FPS)
         
@@ -120,6 +141,9 @@ def main():
             
         if not running:
             break
+        
+        current_time = pygame.time.get_ticks()
+        pause_started_this_frame = False
 
         if game_state == MENU:
 
@@ -152,21 +176,18 @@ def main():
 
             continue
 
-        # События во время игры и паузы
+        # События во время PLAYING
         for event in events:
 
             # Удар по space
             if event.type == pygame.KEYDOWN:
 
-                # Пауза работает и во время игры, и во время паузы
-                if event.key == pygame.K_p:
-                    if game_state == PLAYING:
-                        game_state = PAUSED
-                        pause_started = pygame.time.get_ticks()
-                    elif game_state == PAUSED:
-                        total_paused_time += pygame.time.get_ticks() - pause_started
-                        pause_started = 0
-                        game_state = PLAYING
+                # Включение паузы
+                if event.key == pygame.K_p and game_state == PLAYING:
+                    game_state = PAUSED
+                    pause_started = current_time
+                    pause_started_this_frame = True
+                    continue
 
                 # Остальные игровые действия разрешены только во время PLAYING
                 if game_state == PLAYING:
@@ -177,13 +198,14 @@ def main():
 
                     # Переключение активного игрока по TAB
                     if event.key == pygame.K_TAB:
-                        index = user_team.index(active_player)
-                        index = (index + 1) % len(user_team)
-                        active_player = user_team[index]
-                        for p in user_team:
-                            p.task = None
+                        closest_player = find_closest_player_to_ball(user_team, ball)
+
+                        if closest_player is not None:
+                            active_player = closest_player
+                            active_player.task = None
         
         if game_state == PAUSED:
+            
             draw_game_scene(
                 screen,
                 field_image,
@@ -205,9 +227,48 @@ def main():
             )
 
             draw_timer(screen, font, remaining_seconds)
-            draw_center_text(screen, font, "ПАУЗА")
+            
+            draw_pause_screen(
+                screen,
+                font,
+                pause_resume_button,
+                pause_restart_button,
+                pause_quit_button
+            )
 
             pygame.display.flip()
+
+            for event in events:
+                if event.type == pygame.KEYDOWN:
+
+                    # Снимаем паузу по P, но не в тот же кадр, когда она была включена
+                    if event.key == pygame.K_p and not pause_started_this_frame:
+                        total_paused_time += current_time - pause_started
+                        pause_started = 0
+                        game_state = PLAYING
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if pause_resume_button.collidepoint(event.pos):
+                        total_paused_time += current_time - pause_started
+                        pause_started = 0
+                        game_state = PLAYING
+
+                    if pause_restart_button.collidepoint(event.pos):
+                        left_score = 0
+                        right_score = 0
+
+                        reset_positions(user_team, enemy_team, ball)
+
+                        active_player = user_team[0]
+
+                        start_ticks = current_time
+                        total_paused_time = 0
+                        pause_started = 0
+
+                        game_state = PLAYING
+
+                    if pause_quit_button.collidepoint(event.pos):
+                        running = False
 
             continue
         
@@ -275,8 +336,6 @@ def main():
                         running = False
 
             continue
-        
-        current_time = pygame.time.get_ticks()
 
         remaining_seconds = get_remaining_seconds(
             start_ticks,
@@ -315,7 +374,8 @@ def main():
             enemy_team,
             ball,
             right_goal,
-            left_goal)
+            left_goal
+        )
 
         ball.update()
 

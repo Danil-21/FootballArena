@@ -2,7 +2,16 @@ from config import GRID_SIZE
 
 
 def to_grid(x, y):
-    """Преобразует пиксельные координаты в координаты сетки"""
+    """
+    Преобразует пиксельные координаты в координаты сетки
+    
+    Args:
+        x (int | float): Координата объекта по оси X в пикселях
+        y (int | float): Координата объекта по оси Y в пикселях
+    
+    Returns:
+        tuple[int, int]: Координаты клетки сетки
+    """
 
     grid_x = int(x // GRID_SIZE)
     grid_y = int(y // GRID_SIZE)
@@ -11,12 +20,30 @@ def to_grid(x, y):
 
 
 def get_next_step(start, target):
-    """Возвращает следующую клетку пути от start к target"""
+    """
+    Находит следующую клетку пути от начальной позиции к целевой позиции
+
+    Args:
+        start (tuple[int, int]): Начальная позиция в пикселях
+        target (tuple[int, int]): Целевая позиция в пикселях
+
+    Returns:
+        tuple[int, int]: Координаты следующей клетки пути в сетке
+    """
 
     start = to_grid(start[0], start[1])
     target = to_grid(target[0], target[1])
 
     def heuristic(cell):
+        """
+        Оценивает примерное расстояние от клетки до цели по Манхэттенской метрике
+        
+        Args:
+            cell (tuple[int, int]): Координаты клетки сетки
+        
+        Returns:
+            int: Приблизительное расстояние от клетки до цели
+        """
         return abs(cell[0] - target[0]) + abs(cell[1] - target[1])
 
     open_set = [start]

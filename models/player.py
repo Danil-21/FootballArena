@@ -8,6 +8,16 @@ class Player:
     """Базовая модель игрока"""
 
     def __init__(self, x, y, color):
+        """
+        Создаёт базового игрока с координатами, цветом, радиусом,
+        скоростью и состоянием владения мячом
+        
+        Args: 
+            x (int | float): Начальная координата игрока по оси X
+            y (int | float): Начальная координата игрока по оси Y
+            color (tuple): Цвет игрока
+        """
+
         self.x = x
         self.y = y
         self.color = color
@@ -18,20 +28,34 @@ class Player:
 
 
     def distance_to(self, obj):
-        """Возвращает расстояние от игрока до другого объекта"""
+        """
+        Возвращает расстояние от игрока до другого объекта
+        
+        Args:
+            obj (object): Объект, у которого есть координаты x и y
+        
+        Returns:
+            float: Расстояние между игроком и переданным объектом
+        """
 
         return math.hypot(self.x - obj.x, self.y - obj.y)
 
 
     def limit_to_field(self):
-        """Не даёт игроку выйти за границы поля"""
+        """Ограничивает позицию игрока границами игрового поля"""
 
         self.x = max(self.radius, min(WIDTH - self.radius, self.x))
         self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
 
 
     def move(self, move_x, move_y):
-        """Двигает игрока по заданному направлению"""
+        """
+        Двигает игрока по заданному направлению
+        
+        Args:
+            move_x (int | float): Направление движения по оси X
+            move_y (int | float): Направление движения по оси Y
+        """
         
         self.x += move_x * self.speed
         self.y += move_y * self.speed
@@ -40,7 +64,13 @@ class Player:
 
     
     def kick_ball(self, ball, current_time):
-        """Удар игрока по мячу"""
+        """
+        Удар игрока по мячу
+        
+        Args:
+            ball (Ball): Объект мяча
+            current_time (int): Текущее игровое время
+        """
 
         dx = ball.x - self.x
         dy = ball.y - self.y
@@ -75,12 +105,23 @@ class Player:
 class AIPlayer(Player):
     """Игрок с искусственным интеллектом"""
 
-    def __init__(self, x, y, color, role):
+    def __init__(self, x, y, color, role, number):
+        """
+        Создаёт AI-игрока
+        
+        Args:
+            x (int | float): Начальная координата игрока по оси X
+            y (int | float): Начальная координата игрока по оси Y
+            color (tuple[int, int, int]): Цвет игрока
+            role (str): Роль игрока в команде
+        """
+        
         super().__init__(x, y, color)
 
-        self.speed = PLAYER_SPEED - AI_SPEED_PENALTY # ИИ медленнее
+        self.speed = PLAYER_SPEED - AI_SPEED_PENALTY
         self.role = role
-        self.task = 'SUPPORT'   # <-- ДОБАВИТЬ ЭТО (защита от ошибки)
+        self.number = number
+        self.task = 'SUPPORT'
         
         self.defend_goal = None
         self.attack_goal = None
@@ -90,13 +131,21 @@ class AIPlayer(Player):
         self.zone_y_min = 0
         self.zone_y_max = HEIGHT
 
-        # домашняя позиция для возврата
         self.home_x = x
         self.home_y = y
 
 
     def update(self, ball=None, target_goal=None, teammates=None, enemies=None, current_time=0):
-        """Обновляет поведение AI-игрока в зависимости от текущей задачи"""
+        """
+        Обновляет поведение AI-игрока в зависимости от текущей задачи
+        
+        Args:
+            ball (Ball): Объект мяча
+            target_goal (Goal): Ворота, которые атакует игрок
+            teammates (list): Список партнёров по команде
+            enemies (list): Список игроков соперника
+            current_time (int): Текущее игровое
+        """
         
         if self.task is None:
             return
@@ -118,7 +167,12 @@ class AIPlayer(Player):
 
 
     def chase_ball(self, ball):
-        """Двигает AI-игрока к мячу по сетке"""
+        """
+        Двигает AI-игрока к мячу с использованием следующей клетки пути
+        
+        Args:
+            ball (Ball): Объект мяча
+        """
 
         if ball is None:
             return
@@ -135,7 +189,17 @@ class AIPlayer(Player):
 
 
     def attack(self, ball, target_goal, teammates, enemies, current_time):
-        """Поведение AI-игрока в атаке"""
+        """
+        Управляет поведением AI-игрока в атаке: движение к мячу, удар,
+        пас или продвижение к воротам.
+        
+        Args:
+            ball (Ball): Объект мяча
+            target_goal (Goal): Ворота соперника
+            teammates (list): Список партнёров по команде
+            enemies (list): Список игроков соперника
+            current_time (int): Текущее игровое время
+        """
 
         if ball is None or target_goal is None:
             return
@@ -158,7 +222,8 @@ class AIPlayer(Player):
             return
         
         # Если есть хороший пас - пасовать
-        if teammate is not None and distance_to_goal > AI_SHOOT_DISTANCE and self.is_closer_to_goal(teammate, target_goal):
+        if (teammate is not None and distance_to_goal > AI_SHOOT_DISTANCE 
+            and self.is_closer_to_goal(teammate, target_goal)):
             self.pass_ball(ball, teammate, current_time)
             return
 
@@ -173,7 +238,14 @@ class AIPlayer(Player):
         
 
     def kick_towards_goal(self, ball, goal, current_time):
-        """AI бьёт мяч в сторону ворот"""
+        """
+        Выполняет удар AI-игрока по направлению к центру ворот
+        
+        Args:
+            ball (Ball): Объект мяча
+            goal (Goal): Ворота, по которым выполняется удар
+            current_time (int): Текущее игровое время
+        """
         
         # центр ворот
         target_x = goal.rect.centerx
@@ -204,7 +276,19 @@ class AIPlayer(Player):
 
         
     def find_best_teammate(self, teammates, ball, enemies, target_goal):
-        """Находит лучшего союзника для паса"""
+        """
+        Находит лучшего партнёра для паса на основе безопасности и выгодности передачи
+
+        Args:
+            teammates (list): Список партнёров по команде
+            ball (Ball): Объект мяча
+            enemies (list): Список игроков соперника
+            target_goal (Goal): Ворота соперника
+        
+        Returns:
+            AIPlayer | None: Лучший партнёр для паса или None,
+            если подходящего игрока нет.
+        """
 
         if teammates is None:
             teammates = []
@@ -233,7 +317,14 @@ class AIPlayer(Player):
     
 
     def pass_ball(self, ball, teammate, current_time):
-        """AI отдаёт пас партнёру"""
+        """
+        Выполняет пас AI-игрока выбранному партнёру
+        
+        Args:
+            ball (Ball): Объект мяча
+            teammate (AIPlayer): Партнёр, которому передаётся пас
+            current_time (int): Текущее игровое время
+        """
 
         dx = teammate.x - ball.x
         dy = teammate.y - ball.y
@@ -259,7 +350,16 @@ class AIPlayer(Player):
 
 
     def is_closest_to_ball(self, teammates, ball):
-        """Проверяет, является ли игрок ближайшим к мячу"""
+        """
+        Проверяет, является ли игрок ближайшим к мячу среди партноеров
+        
+        Args:
+            teammates (list): Список партнёров по команде
+            ball (Ball): Объект мяча
+        
+        Returns:
+            bool: True, если текущий игрок ближе всех к мячу, иначе False.
+        """
 
         my_dist = math.hypot(self.x - ball.x, self.y - ball.y)
 
@@ -279,7 +379,12 @@ class AIPlayer(Player):
 
 
     def patrol_zone(self, ball):
-        """Игрок держит защитную зону"""
+        """
+        Двигает игрока внутри защитной зоны в зависимости от положения мяча
+        
+        Args:
+            ball (Ball): Объект мяча
+        """
         
         if ball is None:
             return
@@ -303,7 +408,18 @@ class AIPlayer(Player):
 
 
     def evaluate_pass(self, teammate, ball, enemies, target_goal):
-        """Оценивает выгодность паса"""
+        """
+        Рассчитывает числовую оценку выгодности паса выбранному партнёру
+        
+        Args:
+            teammate (AIPlayer): Партнёр, которому оценивается пас
+            ball (Ball): Объект мяча
+            enemies (list): Список игроков соперника
+            target_goal (Goal): Ворота соперника
+        
+        Returns:
+            float: Оценка выгодности паса
+        """
 
         score = 0
 
@@ -335,7 +451,16 @@ class AIPlayer(Player):
 
 
     def is_pass_safe(self, teammate, enemies):
-        """Проверяет, не находится ли соперник на линии паса"""
+        """
+        Проверяет, не находится ли соперник на линии паса
+        
+        Args:
+            teammate (AIPlayer): Партнёр, которому планируется пас
+            enemies (list): Список игроков соперника
+        
+        Returns:
+            bool: True, если пас считается безопасным, иначе False
+        """
 
         ax = self.x
         ay = self.y
@@ -376,7 +501,14 @@ class AIPlayer(Player):
 
 
     def open_for_pass(self, ball, attack_goal, enemies):
-        """Игрок открывается под пас в сторону ворот соперника"""
+        """
+        Двигает игрока в свободную позицию впереди мяча для получения паса
+        
+        Args:
+            ball (Ball): Объект мяча
+            attack_goal (Goal): Ворота, в сторону которых идёт атака
+            enemies (list): Список игроков соперника
+        """
 
         if ball is None or attack_goal is None:
             return
@@ -397,7 +529,12 @@ class AIPlayer(Player):
 
     
     def cover(self, ball):
-        """Защитник страхует команду во время атаки"""
+        """
+        Двигает защитника в позицию страховки между домашней зоной и мячом
+        
+        Args:
+            ball (Ball): Объект мяча
+        """
 
         if ball is None:
             return
@@ -415,7 +552,12 @@ class AIPlayer(Player):
 
 
     def move_to_support_position(self, ball):
-        """Игрок занимает позицию поддержки рядом с мячом"""
+        """
+        Двигает игрока в позицию поддержки рядом с атакой
+        
+        Args:
+            ball (Ball): Объект мяча
+        """
 
         if ball is None:
             return
@@ -435,7 +577,14 @@ class AIPlayer(Player):
 
 
     def move_towards(self, target_x, target_y, speed_multiplier=1.0):
-        """Двигает игрока к указанной точке"""
+        """
+        Двигает игрока к указанной точке с учётом множителя скорости
+        
+        Args:
+            target_x (int | float): Координата цели по оси X
+            target_y (int | float): Координата цели по оси Y
+            speed_multiplier (int | float): Множитель скорости движения
+        """
 
         dx = target_x - self.x
         dy = target_y - self.y
@@ -448,12 +597,19 @@ class AIPlayer(Player):
         dx /= distance
         dy /= distance
 
-        self.x += dx * self.speed * speed_multiplier
-        self.y += dy * self.speed * speed_multiplier
+        self.x += dx * self.speed * speed_multiplier * 0.85
+        self.y += dy * self.speed * speed_multiplier * 0.85
 
 
     def is_closer_to_goal(self, teammate, goal):
-        """Проверяет, ближе ли партнёр к воротам"""
+        """
+        Проверяет, находится ли партнёр ближе к воротам, чем текущий игрок
+        
+        Args:
+            teammate (AIPlayer): Партнёр по команде
+            goal (Goal): Ворота, расстояние до которых сравнивается
+            Returns: bool: True, если партнёр ближе к воротам, иначе False
+        """
 
         my_dist = math.hypot(goal.rect.centerx - self.x,
                              goal.rect.centery - self.y)

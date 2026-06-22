@@ -2,7 +2,13 @@ import math
 
 
 def resolve_collision(player1, player2):
-    """Разрешает столкновение между двумя игроками"""
+    """
+    Разрешает столкновение между двумя игроками, если их круги пересекаются
+
+    Args:
+        player1 (Player): Первый игрок
+        player2 (Player): Второй игрок
+    """
 
     dx = player2.x - player1.x
     dy = player2.y - player1.y
