@@ -204,7 +204,6 @@ class AIPlayer(Player):
         if ball is None or target_goal is None:
             return
 
-        # Если игрок ещё не владеет мячом - сначала добежать до мяча
         if ball.owner != self:
             self.chase_ball(ball)
             return
@@ -216,18 +215,15 @@ class AIPlayer(Player):
 
         teammate = self.find_best_teammate(teammates, ball, enemies, target_goal)
 
-        # Если близко к воротам - бить
         if distance_to_goal < AI_SHOOT_DISTANCE:
             self.kick_towards_goal(ball, target_goal, current_time)
             return
         
-        # Если есть хороший пас - пасовать
         if (teammate is not None and distance_to_goal > AI_SHOOT_DISTANCE 
             and self.is_closer_to_goal(teammate, target_goal)):
             self.pass_ball(ball, teammate, current_time)
             return
 
-        # Иначе - двигаться к воротам
         self.move_towards(goal_x, goal_y, 0.8)
 
     
@@ -247,7 +243,6 @@ class AIPlayer(Player):
             current_time (int): Текущее игровое время
         """
         
-        # центр ворот
         target_x = goal.rect.centerx
         target_y = goal.rect.centery
 
@@ -266,7 +261,6 @@ class AIPlayer(Player):
         ball.vx = dx * KICK_FORCE
         ball.vy = dy * KICK_FORCE
 
-        # После удара AI отпускает мяч
         if ball.owner == self:
             ball.owner = None
 
@@ -340,7 +334,6 @@ class AIPlayer(Player):
         ball.vx = dx * PASS_FORCE
         ball.vy = dy * PASS_FORCE
 
-        # После паса мяч становится свободным
         if ball.owner == self:
             ball.owner = None
 
@@ -389,7 +382,7 @@ class AIPlayer(Player):
         if ball is None:
             return
         
-        # смещение относительно мяча (чтобы не стоял)
+        # смещение относительно мяча
         target_x = self.x
         target_y = self.y
 
@@ -562,11 +555,9 @@ class AIPlayer(Player):
         if ball is None:
             return
 
-        # Если домашняя позиция слева, команда чаще атакует вправо.
-        # Если домашняя позиция справа, команда чаще атакует влево.
         attack_direction = 1 if self.home_x < WIDTH // 2 else -1
 
-        # Поддержка располагается немного позади мяча
+        # Поддержка немного позади мяча
         target_x = ball.x - SUPPORT_DISTANCE_BEHIND_BALL * attack_direction
         target_y = self.home_y
 

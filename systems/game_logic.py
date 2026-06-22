@@ -102,7 +102,6 @@ def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=
 
     for player in controlled_players:
 
-        # Если этот AI владеет мячом
         if ball.owner == player:
             player.task = 'ATTACK'
         
@@ -113,7 +112,7 @@ def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=
                 player.task = 'COVER'
             else:
                 player.task = 'SUPPORT'
-        # Если мяч свободный
+        
         elif ball.owner is None:
             if player == closest_player:
                 player.task = 'PRESS'
@@ -121,7 +120,7 @@ def assign_team_tasks(full_team, ball, own_goal, enemy_goal, controlled_players=
                 player.task = 'DEFEND'
             else:
                 player.task = 'SUPPORT'
-        # Если противник владеет мячом
+        
         elif enemy_has_ball:
             if player == closest_player:
                 player.task = 'PRESS'

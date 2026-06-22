@@ -51,7 +51,7 @@ def get_next_step(start, target):
     g_score = {start: 0}
 
     while open_set:
-        # выбираем узел с минимальной стоимостью
+        # узел с минимальной стоимостью
         current = min(open_set, key=lambda cell: g_score[cell] + heuristic(cell))
 
         if current == target:

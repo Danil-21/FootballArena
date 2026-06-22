@@ -23,12 +23,12 @@ class Ball:
         self.owner = None
         self.last_owner = None
         self.release_time = 0
-        self.release_cooldown = RELEASE_COOLDOWN # Небольшая задержка, чтобы игрок не забрал мяч обратно мгновенно
+        self.release_cooldown = RELEASE_COOLDOWN
 
 
     def update(self):
         """Обновляет положение мяча и обрабатывает отскок от границ поля"""
-        # Движение мяча
+       
         self.x += self.vx
         self.y += self.vy
 
@@ -36,7 +36,6 @@ class Ball:
         self.vx *= BALL_FRICTION
         self.vy *= BALL_FRICTION
 
-        # Отскок от стен
         if self.x - self.radius <= 0:
             self.x = self.radius
             self.vx *= -1

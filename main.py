@@ -94,37 +94,27 @@ def main():
 
     game_state = MENU
     reset_timer = 0
-
-    # Время старта матча. Пока игра в меню, матч ещё не начался.
     start_ticks = 0
-
-    # Общее время, которое матч провёл на паузе
     total_paused_time = 0
-
-    # Время начала текущей паузы
     pause_started = 0
 
     user_team, enemy_team, ball, left_goal, right_goal, active_player = create_match_objects()
 
-    # Счет
     left_score = 0
     right_score = 0
 
-    # Зоны команды пользователя
     for p in user_team:
         p.zone_x_min = 0
         p.zone_x_max = WIDTH * 0.6
         p.zone_y_min = 0
         p.zone_y_max = HEIGHT
 
-    # Зоны команды противника
     for p in enemy_team:
         p.zone_x_min = WIDTH * 0.4
         p.zone_x_max = WIDTH
         p.zone_y_min = 0
         p.zone_y_max = HEIGHT
 
-    # Домашние позиции для игроков
     for p in user_team:
         p.home_x, p.home_y = p.x, p.y
     for p in enemy_team:
@@ -179,24 +169,17 @@ def main():
         # События во время PLAYING
         for event in events:
 
-            # Удар по space
             if event.type == pygame.KEYDOWN:
-
-                # Включение паузы
                 if event.key == pygame.K_p and game_state == PLAYING:
                     game_state = PAUSED
                     pause_started = current_time
                     pause_started_this_frame = True
                     continue
 
-                # Остальные игровые действия разрешены только во время PLAYING
                 if game_state == PLAYING:
-                    
-                    # Удар по мячу активным игроком
                     if event.key == pygame.K_SPACE:
                         active_player.kick_ball(ball, pygame.time.get_ticks())
 
-                    # Переключение активного игрока по TAB
                     if event.key == pygame.K_TAB:
                         closest_player = find_closest_player_to_ball(user_team, ball)
 
@@ -205,7 +188,6 @@ def main():
                             active_player.task = None
         
         if game_state == PAUSED:
-            
             draw_game_scene(
                 screen,
                 field_image,
@@ -240,8 +222,6 @@ def main():
 
             for event in events:
                 if event.type == pygame.KEYDOWN:
-
-                    # Снимаем паузу по P, но не в тот же кадр, когда она была включена
                     if event.key == pygame.K_p and not pause_started_this_frame:
                         total_paused_time += current_time - pause_started
                         pause_started = 0
@@ -349,18 +329,15 @@ def main():
             continue
 
         # Управление активным игроком
-
         keys = pygame.key.get_pressed()
         
-        # Союзники, которыми сейчас управляет AI.
-        # Активного игрока сюда не добавляем, потому что им управляет пользователь.
         for p in user_team:
             if p != active_player:
                 p.task = None
         
         ai_user_team = [p for p in user_team if p != active_player]
         
-        # Назначаем задачи только тем союзникам, которые сейчас под управлением AI
+        # Задачи только AI
         assign_team_tasks(
                 user_team,
                 ball,
@@ -368,8 +345,6 @@ def main():
                 right_goal,
                 controlled_players=ai_user_team
         )
-
-        # Противники всегда под управлением AI, поэтому назначаем задачи всем
         assign_team_tasks(
             enemy_team,
             ball,
@@ -380,7 +355,6 @@ def main():
         ball.update()
 
         # Обновление только игроков, которыми управляет AI
-
         move_x, move_y = get_player_movement(keys)
         for p in user_team:
             if p == active_player:
@@ -393,7 +367,7 @@ def main():
                     enemies=enemy_team,
                     current_time=current_time
                 )
-        # Противники всегда под управлением AI, поэтому обновляем всех
+
         for e in enemy_team:
             e.update(
                 ball=ball,
@@ -403,14 +377,13 @@ def main():
                 current_time=current_time
             )
 
-        # Столкновения между игроками
+        # Столкновения
         all_players = user_team + enemy_team
         for i, player_1 in enumerate(all_players):
             for player_2 in all_players[i+1:]:
                 resolve_collision(player_1, player_2)
             handle_ball_possession(player_1, ball, current_time)
 
-        # Проверка гола
         goal = goal_check(ball, left_goal, right_goal)
 
         if goal == 'LEFT':
